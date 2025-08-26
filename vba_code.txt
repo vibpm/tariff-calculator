@@ -1,0 +1,97 @@
+olevba 0.60.2 on Python 3.13.5 - http://decalage.info/python/oletools
+===============================================================================
+FILE: calc.xlsm
+Type: OpenXML
+WARNING  For now, VBA stomping cannot be detected for files in memory
+-------------------------------------------------------------------------------
+VBA MACRO Module1.bas 
+in file: xl/vbaProject.bin - OLE stream: 'VBA/Module1'
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+Sub DataCleaning()
+Attribute DataCleaning.VB_Description = "Очистка введенных данных во всех калькуляторах"
+Attribute DataCleaning.VB_ProcData.VB_Invoke_Func = "X\n14"
+'
+'   Range("E7:F9,E18:G20,O7:P9,O18:Q20,Y7:Z9,Y18:AA20").Select
+    Selection.ClearContents
+    Range("E7:F7").Select
+    
+    
+End Sub
+-------------------------------------------------------------------------------
+VBA MACRO ЭтаКнига.cls 
+in file: xl/vbaProject.bin - OLE stream: 'VBA/ЭтаКнига'
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+(empty macro)
+-------------------------------------------------------------------------------
+VBA MACRO Лист1.cls 
+in file: xl/vbaProject.bin - OLE stream: 'VBA/Лист1'
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+Private Sub CommandButton1_Click()
+
+
+    Range("E7:F9,E18:G20,O7:P9,O18:Q20,Y7:Z9,Y18:AA20").Select
+    Selection.ClearContents
+    Range("E7:F7").Select
+    
+End Sub
+-------------------------------------------------------------------------------
+VBA MACRO Лист3.cls 
+in file: xl/vbaProject.bin - OLE stream: 'VBA/Лист3'
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+(empty macro)
+-------------------------------------------------------------------------------
+VBA MACRO Лист4.cls 
+in file: xl/vbaProject.bin - OLE stream: 'VBA/Лист4'
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+(empty macro)
+-------------------------------------------------------------------------------
+VBA MACRO Лист5.cls 
+in file: xl/vbaProject.bin - OLE stream: 'VBA/Лист5'
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+(empty macro)
+-------------------------------------------------------------------------------
+VBA MACRO Лист7.cls 
+in file: xl/vbaProject.bin - OLE stream: 'VBA/Лист7'
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+(empty macro)
+-------------------------------------------------------------------------------
+VBA MACRO Лист2.cls 
+in file: xl/vbaProject.bin - OLE stream: 'VBA/Лист2'
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+(empty macro)
+-------------------------------------------------------------------------------
+VBA MACRO Лист12.cls 
+in file: xl/vbaProject.bin - OLE stream: 'VBA/Лист12'
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+(empty macro)
+-------------------------------------------------------------------------------
+VBA MACRO Лист6.cls 
+in file: xl/vbaProject.bin - OLE stream: 'VBA/Лист6'
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+(empty macro)
+-------------------------------------------------------------------------------
+VBA MACRO Module2.bas 
+in file: xl/vbaProject.bin - OLE stream: 'VBA/Module2'
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+Sub Очистить_П1_П2()
+Attribute Очистить_П1_П2.VB_ProcData.VB_Invoke_Func = " \n14"
+'
+' Очистить_П1_П2 Макрос
+'
+
+'
+    Range("E3:F3,E6:F8,N3:O3,N6:O8").Select
+    Range("N6").Activate
+    Selection.ClearContents
+    Range("E3:F3").Select
+End Sub
++----------+--------------------+---------------------------------------------+
+|Type      |Keyword             |Description                                  |
++----------+--------------------+---------------------------------------------+
+|AutoExec  |CommandButton1_Click|Runs when the file is opened and ActiveX     |
+|          |                    |objects trigger events                       |
+|Suspicious|Hex Strings         |Hex-encoded strings were detected, may be    |
+|          |                    |used to obfuscate strings (option --decode to|
+|          |                    |see all)                                     |
++----------+--------------------+---------------------------------------------+
+

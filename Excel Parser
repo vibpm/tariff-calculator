@@ -1,0 +1,243 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "f3440689-d183-45a8-8780-a3604e2a9fc0",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Настройки заданы. Можно переходить к следующей ячейке.\n"
+     ]
+    }
+   ],
+   "source": [
+    "import pandas as pd\n",
+    "import openpyxl\n",
+    "import os\n",
+    "\n",
+    "# --- НАСТРОЙКИ ---\n",
+    "# Имя вашего Excel файла (убедитесь, что он лежит в той же папке, что и ноутбук)\n",
+    "FILENAME = 'calc.xlsm'\n",
+    "\n",
+    "# !!! ВАЖНО: Замените 'Калькулятор' и 'ЛистРасчета' на реальные имена ваших листов с логикой.\n",
+    "SHEETS_WITH_LOGIC = ['Калькулятор', 'Расчет РС', 'Сравнение версий']\n",
+    "\n",
+    "# Имена файлов, куда мы сохраним результаты\n",
+    "FORMULAS_OUTPUT_FILE = 'formulas_map.txt'\n",
+    "DATA_OUTPUT_FOLDER = 'data_export' # Папка для CSV файлов\n",
+    "\n",
+    "print(\"Настройки заданы. Можно переходить к следующей ячейке.\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "id": "52eb949f-09ea-4a14-89db-410c9de5f832",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Функции объявлены. Можно запускать основной блок.\n"
+     ]
+    }
+   ],
+   "source": [
+    "def extract_formulas(workbook, output_file):\n",
+    "    \"\"\"\n",
+    "    Проходит по всем листам в файле, находит ячейки с формулами\n",
+    "    и сохраняет их в текстовый файл.\n",
+    "    \"\"\"\n",
+    "    print(\">>> Шаг 1: Извлечение формул...\")\n",
+    "    with open(output_file, 'w', encoding='utf-8') as f:\n",
+    "        for sheet_name in workbook.sheetnames:\n",
+    "            sheet = workbook[sheet_name]\n",
+    "            has_formulas_on_sheet = False\n",
+    "            for row in sheet.iter_rows():\n",
+    "                for cell in row:\n",
+    "                    if cell.data_type == 'f':\n",
+    "                        if not has_formulas_on_sheet:\n",
+    "                            f.write(f\"\\n{'='*20} ЛИСТ: {sheet.title} {'='*20}\\n\\n\")\n",
+    "                            has_formulas_on_sheet = True\n",
+    "                        formula = cell.value\n",
+    "                        f.write(f\"Ячейка: {cell.coordinate}\\tФормула: {formula}\\n\")\n",
+    "    print(f\"✓ Формулы успешно извлечены и сохранены в файл: {output_file}\\n\")\n",
+    "\n",
+    "\n",
+    "def extract_data_sheets(filename, sheets_to_ignore, output_folder):\n",
+    "    \"\"\"\n",
+    "    Читает листы Excel, которые являются справочниками, и сохраняет их в CSV.\n",
+    "    \"\"\"\n",
+    "    print(\">>> Шаг 2: Экспорт листов с данными (справочников)...\")\n",
+    "    if not os.path.exists(output_folder):\n",
+    "        os.makedirs(output_folder)\n",
+    "    try:\n",
+    "        xls = pd.ExcelFile(filename)\n",
+    "    except FileNotFoundError:\n",
+    "        print(f\"!!! ОШИБКА: Файл {filename} не найден.\")\n",
+    "        return\n",
+    "\n",
+    "    for sheet_name in xls.sheet_names:\n",
+    "        if sheet_name not in sheets_to_ignore:\n",
+    "            print(f\"  - Обрабатываю лист '{sheet_name}' как справочник...\")\n",
+    "            df = pd.read_excel(xls, sheet_name=sheet_name)\n",
+    "            csv_filename = os.path.join(output_folder, f\"{sheet_name}.csv\")\n",
+    "            df.to_csv(csv_filename, index=False, encoding='utf-8-sig')\n",
+    "            print(f\"    ✓ Лист '{sheet_name}' сохранен в {csv_filename}\")\n",
+    "        else:\n",
+    "            print(f\"  - Пропускаю лист '{sheet_name}', так как он указан в SHEETS_WITH_LOGIC.\")\n",
+    "    print(\"\\n✓ Экспорт данных завершен.\\n\")\n",
+    "\n",
+    "print(\"Функции объявлены. Можно запускать основной блок.\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "id": "34756bc0-7e3e-4e9c-98f2-d43393595d0a",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Анализ файла: calc.xlsm\n",
+      "\n",
+      ">>> Шаг 1: Извлечение формул...\n"
+     ]
+    },
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "C:\\Users\\v.baldin\\AppData\\Local\\anaconda3\\Lib\\site-packages\\openpyxl\\worksheet\\_read_only.py:85: UserWarning: Data Validation extension is not supported and will be removed\n",
+      "  for idx, row in parser.parse():\n"
+     ]
+    },
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "✓ Формулы успешно извлечены и сохранены в файл: formulas_map.txt\n",
+      "\n",
+      ">>> Шаг 2: Экспорт листов с данными (справочников)...\n",
+      "  - Пропускаю лист 'Калькулятор', так как он указан в SHEETS_WITH_LOGIC.\n",
+      "  - Пропускаю лист 'Расчет РС', так как он указан в SHEETS_WITH_LOGIC.\n",
+      "  - Обрабатываю лист 'Примеры_расчет РС' как справочник...\n",
+      "    ✓ Лист 'Примеры_расчет РС' сохранен в data_export\\Примеры_расчет РС.csv\n",
+      "  - Пропускаю лист 'Сравнение версий', так как он указан в SHEETS_WITH_LOGIC.\n",
+      "  - Обрабатываю лист 'Прейскурант НМВ' как справочник...\n",
+      "    ✓ Лист 'Прейскурант НМВ' сохранен в data_export\\Прейскурант НМВ.csv\n",
+      "  - Обрабатываю лист 'КП' как справочник...\n",
+      "    ✓ Лист 'КП' сохранен в data_export\\КП.csv\n",
+      "  - Обрабатываю лист 'списки' как справочник...\n",
+      "    ✓ Лист 'списки' сохранен в data_export\\списки.csv\n",
+      "  - Обрабатываю лист 'Данные для сравнения' как справочник...\n",
+      "    ✓ Лист 'Данные для сравнения' сохранен в data_export\\Данные для сравнения.csv\n",
+      "  - Обрабатываю лист 'ТП' как справочник...\n",
+      "    ✓ Лист 'ТП' сохранен в data_export\\ТП.csv\n",
+      "\n",
+      "✓ Экспорт данных завершен.\n",
+      "\n",
+      "🎉 Все готово! Проверьте созданные файлы в папке проекта.\n"
+     ]
+    }
+   ],
+   "source": [
+    "print(f\"Анализ файла: {FILENAME}\\n\")\n",
+    "\n",
+    "# Для чтения формул ОБЯЗАТЕЛЬНО используем openpyxl с data_only=False\n",
+    "try:\n",
+    "    # read_only=True ускоряет чтение больших файлов\n",
+    "    wb = openpyxl.load_workbook(FILENAME, data_only=False, read_only=True)\n",
+    "except FileNotFoundError:\n",
+    "    print(f\"!!! ОШИБКА: Файл {FILENAME} не найден. Убедитесь, что он в той же папке, что и ваш Jupyter ноутбук.\")\n",
+    "else:\n",
+    "    # Вызываем наши функции\n",
+    "    extract_formulas(wb, FORMULAS_OUTPUT_FILE)\n",
+    "    extract_data_sheets(FILENAME, SHEETS_WITH_LOGIC, DATA_OUTPUT_FOLDER)\n",
+    "    print(\"🎉 Все готово! Проверьте созданные файлы в папке проекта.\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "id": "78d87894-5739-440c-a20f-a34dba8e745a",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Requirement already satisfied: oletools in c:\\users\\v.baldin\\appdata\\local\\anaconda3\\lib\\site-packages (0.60.2)\n",
+      "Requirement already satisfied: pyparsing<4,>=2.1.0 in c:\\users\\v.baldin\\appdata\\local\\anaconda3\\lib\\site-packages (from oletools) (3.2.0)\n",
+      "Requirement already satisfied: olefile>=0.46 in c:\\users\\v.baldin\\appdata\\local\\anaconda3\\lib\\site-packages (from oletools) (0.47)\n",
+      "Requirement already satisfied: easygui in c:\\users\\v.baldin\\appdata\\local\\anaconda3\\lib\\site-packages (from oletools) (0.98.3)\n",
+      "Requirement already satisfied: colorclass in c:\\users\\v.baldin\\appdata\\local\\anaconda3\\lib\\site-packages (from oletools) (2.2.2)\n",
+      "Requirement already satisfied: pcodedmp>=1.2.5 in c:\\users\\v.baldin\\appdata\\local\\anaconda3\\lib\\site-packages (from oletools) (1.2.6)\n",
+      "Requirement already satisfied: msoffcrypto-tool in c:\\users\\v.baldin\\appdata\\local\\anaconda3\\lib\\site-packages (from oletools) (5.4.2)\n",
+      "Requirement already satisfied: win-unicode-console in c:\\users\\v.baldin\\appdata\\local\\anaconda3\\lib\\site-packages (from pcodedmp>=1.2.5->oletools) (0.5)\n",
+      "Requirement already satisfied: cryptography>=39.0 in c:\\users\\v.baldin\\appdata\\local\\anaconda3\\lib\\site-packages (from msoffcrypto-tool->oletools) (44.0.1)\n",
+      "Requirement already satisfied: cffi>=1.12 in c:\\users\\v.baldin\\appdata\\local\\anaconda3\\lib\\site-packages (from cryptography>=39.0->msoffcrypto-tool->oletools) (1.17.1)\n",
+      "Requirement already satisfied: pycparser in c:\\users\\v.baldin\\appdata\\local\\anaconda3\\lib\\site-packages (from cffi>=1.12->cryptography>=39.0->msoffcrypto-tool->oletools) (2.21)\n"
+     ]
+    }
+   ],
+   "source": [
+    "!pip install -U oletools"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "id": "97b57f1c-cef5-4421-9099-ca41ce2a8509",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "Encoding for stdout is only cp1251, will auto-encode text with utf8 before output\n"
+     ]
+    }
+   ],
+   "source": [
+    "!olevba calc.xlsm > vba_code.txt"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "32f0d1ec-5cff-4fd9-a0d9-4f5e5cd0a348",
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3 (ipykernel)",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.13.5"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
