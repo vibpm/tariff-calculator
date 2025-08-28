@@ -146,3 +146,29 @@ button:disabled { background-color: #a0c3e8; cursor: not-allowed; }
     .price-summary-table { font-size: 14px; }
     .price-summary-table > div { padding: 8px; }
 }
+/* Добавить в конец static/css/style.css */
+.card-details {
+    border-top: 1px solid var(--border-color);
+    padding: 0 30px;
+}
+.card-details[open] {
+    padding-bottom: 20px;
+}
+.card-details summary {
+    padding: 15px 0;
+    font-weight: 500;
+    color: var(--primary-color);
+    cursor: pointer;
+    outline: none;
+}
+#calculation-steps {
+    font-family: monospace; /* Моноширинный шрифт для лучшего выравнивания чисел */
+    font-size: 14px;
+    background-color: #fdfdfd;
+    border-left: 3px solid var(--primary-color);
+    padding: 15px;
+    white-space: pre-wrap; /* Сохраняет переносы строк */
+}
+#calculation-steps p {
+    margin: 0 0 8px 0;
+}

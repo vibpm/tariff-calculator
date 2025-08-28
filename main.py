@@ -8,11 +8,9 @@ import pandas as pd
 from typing import Optional, List, Dict
 from datetime import datetime, date
 import json
-
-# ===== НОВОЕ: Импортируем наш файл с логикой =====
 import logic
 
-# --- Модели данных (без изменений) ---
+# --- Модели данных ---
 class LevelInput(BaseModel):
     level: str
     accounts: int
@@ -25,12 +23,12 @@ class CalculationInput(BaseModel):
     discount_percent: float = 0.0
     fixation_months: int = 0
 
-# --- Инициализация (без изменений) ---
+# --- Инициализация ---
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-# --- Глобальные переменные и функции (без изменений) ---
+# --- Глобальные переменные и функции ---
 df_prices = None
 MONTH_MAP = {
     'янв': 1, 'фев': 2, 'мар': 3, 'апр': 4, 'май': 5, 'июн': 6,
@@ -95,7 +93,7 @@ async def get_main_page(request: Request):
     return templates.TemplateResponse("index.html", {
         "request": request, "services": services, "levels": levels,
         "periods": periods, "minutes_map_json": json.dumps(minutes_map),
-        "fixation_map_json": json.dumps(logic.FIXATION_COEFFICIENT_MAP) # Берем константу из logic.py
+        "fixation_map_json": json.dumps(logic.FIXATION_COEFFICIENT_MAP)
     })
 
 @app.get("/get_levels_for_service/{service_name}")
@@ -130,7 +128,7 @@ async def handle_calculation(data: CalculationInput):
         return {"error": f"Тарифный план '{data.service}' является однопользовательским. Выбрано пользователей: {total_accounts}."}
 
     warning_message = None
-    if not is_single_user_service and total_accounts == 1:
+    if not is_single_user_service and total_accounts == 1 and total_accounts > 0:
         warning_message = "Внимание! Выбран многопользовательский тариф, но указан только 1 пользователь."
 
     try:

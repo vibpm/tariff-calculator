@@ -17,6 +17,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const levelsWarning = document.getElementById('levels-warning');
     const periodSelect = document.getElementById('period');
     const periodWarning = document.getElementById('period-warning');
+    // ===== НОВЫЕ ПЕРЕМЕННЫЕ =====
+    const detailsContainer = document.getElementById('calculation-details-container');
+    const stepsContainer = document.getElementById('calculation-steps');
+    // =============================
     
     let levelInputs = [];
 
@@ -147,7 +151,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // --- Вешаем обработчики ---
+    // --- Вешаем обработчики событий ---
     serviceSelectElement.addEventListener('change', updateLevels);
     periodSelect.addEventListener('change', validatePeriod);
     fixationMonthsInput.addEventListener('input', () => {
@@ -160,6 +164,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // --- Обработчик кнопки "Рассчитать" ---
     calculateBtn.addEventListener('click', async () => {
+        // ... (сбор данных)
         const period = periodSelect.value;
         const service = choices.getValue(true);
         const prepayment_months = parseInt(prepaymentMonthsInput.value, 10);
@@ -172,17 +177,20 @@ document.addEventListener('DOMContentLoaded', function() {
             if (accounts > 0) levelsData.push({ level: input.dataset.level, accounts: accounts });
         });
         
+        // --- Обновление UI ---
         calculateBtn.disabled = true;
         calculateBtn.textContent = 'Расчет...';
         resultContainer.innerHTML = '';
         prepaymentMonthsInput.classList.remove('is-invalid');
+        detailsContainer.hidden = true; // Скрываем детали перед новым расчетом
+        stepsContainer.innerHTML = '';  // Очищаем детали
         
+        // --- Валидация ---
         if (!validateUserCount()) {
             calculateBtn.disabled = true;
             calculateBtn.textContent = 'Рассчитать';
             return;
         }
-
         const isLDService = service && service.includes('ЛД');
         if (isLDService && prepayment_months < 4) {
             resultContainer.innerHTML = `<p class="error">Внимание! Для ТП 'ЛД' предоплата не может быть меньше 4 месяцев.</p>`;
@@ -191,7 +199,6 @@ document.addEventListener('DOMContentLoaded', function() {
             calculateBtn.textContent = 'Рассчитать';
             return;
         }
-
         if (!service || levelsData.length === 0) {
             resultContainer.innerHTML = `<p class="error">Пожалуйста, выберите тарифный план и укажите количество пользователей.</p>`;
             calculateBtn.disabled = false;
@@ -199,6 +206,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
+        // --- Запрос к серверу ---
         try {
             const response = await fetch('/calculate', {
                 method: 'POST',
@@ -211,26 +219,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 const summary = data.price_summary;
                 const totals = data.totals;
                 let warningHtml = data.warning ? `<p class="error">${data.warning}</p>` : '';
-
-                // --- НОВАЯ ЛОГИКА ФОРМИРОВАНИЯ HTML ---
-                let discountedRowHtml = '';
-                if (discount_percent > 0) {
-                    discountedRowHtml = `
-                        <div class="price-summary-row">Итого со скидкой</div>
-                        <div class="price-summary-row">${summary.discounted_period.toFixed(2).replace('.', ',')} руб.</div>
-                        <div class="price-summary-row">${summary.discounted_monthly.toFixed(2).replace('.', ',')} руб.</div>
-                    `;
-                }
-
-                let fixedRowHtml = '';
-                if (fixation_months > 0) {
-                    fixedRowHtml = `
-                        <div class="price-summary-row total-row">Итого с фиксацией</div>
-                        <div class="price-summary-row total-row"><strong>${summary.fixed_period.toFixed(2).replace('.', ',')} руб.</strong></div>
-                        <div class="price-summary-row total-row"><strong>${summary.fixed_monthly.toFixed(2).replace('.', ',')} руб.</strong></div>
-                    `;
-                }
                 
+                // Отображение основной таблицы результатов
                 resultContainer.innerHTML = `
                     ${warningHtml}
                     <h4>Итоговый расчет для ${totals.accounts} пользователей:</h4>
@@ -241,10 +231,30 @@ document.addEventListener('DOMContentLoaded', function() {
                         <div class="price-summary-row">По прейскуранту</div>
                         <div class="price-summary-row">${summary.list_period.toFixed(2).replace('.', ',')} руб.</div>
                         <div class="price-summary-row">${summary.list_monthly.toFixed(2).replace('.', ',')} руб.</div>
-                        ${discountedRowHtml}
-                        ${fixedRowHtml}
+                        ${discount_percent > 0 ? `
+                        <div class="price-summary-row">Итого со скидкой</div>
+                        <div class="price-summary-row">${summary.discounted_period.toFixed(2).replace('.', ',')} руб.</div>
+                        <div class="price-summary-row">${summary.discounted_monthly.toFixed(2).replace('.', ',')} руб.</div>
+                        ` : ''}
+                        ${fixation_months > 0 ? `
+                        <div class="price-summary-row total-row">Итого с фиксацией</div>
+                        <div class="price-summary-row total-row"><strong>${summary.fixed_period.toFixed(2).replace('.', ',')} руб.</strong></div>
+                        <div class="price-summary-row total-row"><strong>${summary.fixed_monthly.toFixed(2).replace('.', ',')} руб.</strong></div>
+                        ` : ''}
                     </div>
                 `;
+
+                // ===== НОВЫЙ БЛОК: Заполнение и отображение деталей расчета =====
+                if (data.explanation && data.explanation.length > 0) {
+                    data.explanation.forEach(step => {
+                        const p = document.createElement('p');
+                        p.innerHTML = step;
+                        stepsContainer.appendChild(p);
+                    });
+                    detailsContainer.hidden = false;
+                }
+                // ==============================================================
+
             } else {
                 const errorMessage = data.error || data.detail || `Ошибка сервера (статус: ${response.status})`;
                 resultContainer.innerHTML = `<p class="error">${errorMessage}</p>`;

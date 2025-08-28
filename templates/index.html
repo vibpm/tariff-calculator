@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Калькулятор тарифов</title>
+
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css"/>
     <link rel="stylesheet" href="/static/css/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -11,12 +12,14 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
+
     <div class="container">
         <div class="calculator-card">
             <header class="card-header">
                 <h1>Калькулятор тарифов</h1>
                 <p>Выберите параметры для расчета стоимости</p>
             </header>
+
             <main class="card-body">
                 
                 <div class="form-group">
@@ -26,7 +29,6 @@
                         <option value="{{ p }}">{{ p }}</option>
                         {% endfor %}
                     </select>
-                    <!-- ===== НОВЫЙ БЛОК для предупреждения ===== -->
                     <div id="period-warning" class="validation-message"></div>
                 </div>
                 
@@ -78,15 +80,27 @@
                 </div>
                 <button id="calculate-btn">Рассчитать</button>
             </main>
+
             <footer id="result-container" class="card-footer">
-                <!-- Результат появится здесь -->
+                <!-- Основной результат появится здесь -->
             </footer>
+
+            <!-- ===== НОВЫЙ БЛОК для пошагового расчета ===== -->
+            <details id="calculation-details-container" class="card-details" hidden>
+                <summary>Показать пошаговый расчет</summary>
+                <div id="calculation-steps">
+                    <!-- Шаги расчета появятся здесь -->
+                </div>
+            </details>
+            <!-- ============================================= -->
         </div>
     </div>
+
     <script>
         const MINUTE_MAP = {{ minutes_map_json | safe }};
         const FIXATION_COEFFICIENT_MAP = {{ fixation_map_json | safe }};
     </script>
+    
     <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
     <script src="/static/js/script.js"></script>
 </body>
