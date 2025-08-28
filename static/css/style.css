@@ -51,15 +51,11 @@ select:focus, input[type="number"]:focus, input[type="text"]:focus {
 input[readonly] {
     background-color: #f4f7f9; cursor: not-allowed; font-weight: bold; color: #555;
 }
-/* ===== ИЗМЕНЕНИЕ: Стиль для невалидных полей и контейнеров ===== */
 .is-invalid {
     border-color: var(--error-color) !important;
     box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.2) !important;
 }
-.choices__inner.is-invalid { /* Отдельно для Choices.js */
-    border-color: var(--error-color);
-}
-/* ========================================================== */
+.choices__inner.is-invalid { border-color: var(--error-color); }
 /* --- Стилизация кнопки --- */
 button {
     width: 100%; padding: 12px 20px; margin-top: 10px; font-size: 16px; font-weight: 700;
@@ -72,8 +68,7 @@ button:disabled { background-color: #a0c3e8; cursor: not-allowed; }
 /* --- Стилизация блока с уровнями --- */
 .levels-container {
     border: 1px solid var(--border-color); border-radius: var(--border-radius);
-    margin-top: 20px;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease; /* Добавляем плавность */
+    margin-top: 20px; transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .levels-header, .level-row, .levels-footer {
     display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 15px;
@@ -92,33 +87,18 @@ button:disabled { background-color: #a0c3e8; cursor: not-allowed; }
     font-weight: 500; font-size: 16px; color: var(--primary-color); justify-self: end;
 }
 .levels-footer { border-top: 2px solid var(--border-color); background-color: #f9fafb; }
-.level-placeholder {
-    padding: 20px; text-align: center; color: #888; font-style: italic;
-}
+.level-placeholder { padding: 20px; text-align: center; color: #888; font-style: italic; }
 /* --- Стили для группы опций --- */
 .options-group {
     display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 10px;
 }
-/* ===== ИЗМЕНЕНИЕ: Исправляем отступы для сообщений валидации ===== */
+/* --- Стили для сообщений валидации --- */
 .validation-message {
-    color: var(--error-color);
-    font-size: 14px;
-    font-weight: 500;
-    margin-top: 8px; /* Создаем отступ сверху, а не отрицательный */
-    margin-bottom: 10px;
-    min-height: 20px;
-    transition: opacity 0.3s ease;
+    color: var(--error-color); font-size: 14px; font-weight: 500;
+    margin-top: 8px; margin-bottom: 10px; min-height: 20px; transition: opacity 0.3s ease;
 }
-/* Убираем лишний нижний отступ у родителя, когда есть предупреждение */
-.form-group:has(.validation-message:not(:empty)) {
-    margin-bottom: 0;
-}
-#levels-warning {
-    margin-top: 15px;
-    margin-bottom: 15px;
-    text-align: center;
-}
-/* ============================================================= */
+.form-group:has(.validation-message:not(:empty)) { margin-bottom: 0; }
+#levels-warning { margin-top: 15px; margin-bottom: 15px; text-align: center; }
 /* --- Стилизация блока результатов --- */
 .card-footer {
     padding: 20px 30px; background-color: var(--background-color); border-top: 1px solid var(--border-color);
@@ -136,8 +116,24 @@ button:disabled { background-color: #a0c3e8; cursor: not-allowed; }
 .price-summary-table > div:nth-child(3n+1) { text-align: left; font-weight: 500; }
 .price-summary-header { background-color: #f9fafb; color: var(--label-color); font-size: 14px; font-weight: 700; }
 .price-summary-row { background-color: #fff; border-top: 1px solid var(--border-color); font-size: 15px; }
-.price-summary-row.total-row { background-color: #f0f5fc; font-weight: 700; }
-.price-summary-row.total-row strong { color: var(--primary-color); font-size: 18px; }
+
+/* ===== ИЗМЕНЕНИЯ ЗДЕСЬ ===== */
+.price-summary-row.total-row {
+    /* Убираем все специальные стили, делаем как обычную строку */
+    background-color: #fff; /* Убираем синий фон */
+    font-weight: normal;   /* Убираем жирность по умолчанию */
+}
+.price-summary-row.total-row strong {
+    /* Убираем специальные стили, strong будет просто жирным */
+    color: inherit;
+    font-size: inherit;
+}
+/* Делаем последнюю видимую строку в таблице жирной */
+.price-summary-table > div.price-summary-row:nth-last-child(-n+3) {
+    font-weight: 700;
+}
+/* =========================== */
+
 /* --- Адаптивность --- */
 @media (max-width: 600px) {
     body { padding-top: 10px; padding-bottom: 10px; }

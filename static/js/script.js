@@ -1,8 +1,13 @@
 document.addEventListener('DOMContentLoaded', function() {
     
-    // --- Получаем все нужные элементы со страницы ---
-    const periodSelect = document.getElementById('period');
+    // --- Инициализация ---
     const serviceSelectElement = document.getElementById('service');
+    const choices = new Choices(serviceSelectElement, {
+        searchResultLimit: 10,
+        itemSelectText: 'Нажмите для выбора',
+        placeholder: true,
+    });
+
     const calculateBtn = document.getElementById('calculate-btn');
     const resultContainer = document.getElementById('result-container');
     const levelsBody = document.getElementById('levels-body');
@@ -10,11 +15,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const fixationCoefficientInput = document.getElementById('fixation_coefficient');
     const prepaymentMonthsInput = document.getElementById('prepayment_months');
     const levelsWarning = document.getElementById('levels-warning');
+    const periodSelect = document.getElementById('period');
     const periodWarning = document.getElementById('period-warning');
     
     let levelInputs = [];
 
-    // --- Карта месяцев для JS (месяцы 0-11) ---
+    // --- Функции ---
     const JS_MONTH_MAP = {
         'янв': 0, 'фев': 1, 'мар': 2, 'апр': 3, 'май': 4, 'июн': 5,
         'июл': 6, 'авг': 7, 'сен': 8, 'окт': 9, 'ноя': 10, 'дек': 11
@@ -28,51 +34,31 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (e) { return null; }
     }
     
-    // ===== НОВЫЙ БЛОК: Установка значения по умолчанию для периода =====
     function setDefaultPeriod() {
         const today = new Date();
-        // new Date() правильно обработает переход через год (например, декабрь -> январь)
         const nextMonthDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-        
-        // Создаем массив с русскими сокращениями для обратного преобразования
         const monthAbbrs = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
-        
         const nextMonthAbbr = monthAbbrs[nextMonthDate.getMonth()];
-        const nextMonthYear = String(nextMonthDate.getFullYear()).slice(-2); // "2025" -> "25"
+        const nextMonthYear = String(nextMonthDate.getFullYear()).slice(-2);
         const nextMonthString = `${nextMonthAbbr}.${nextMonthYear}`;
-        
-        // Проверяем, есть ли такая опция в списке
         const optionExists = Array.from(periodSelect.options).some(opt => opt.value === nextMonthString);
-
         if (optionExists) {
             periodSelect.value = nextMonthString;
         } else {
-            // Если следующего месяца нет в прайсе, выбираем последнюю доступную опцию
             if (periodSelect.options.length > 0) {
                 periodSelect.value = periodSelect.options[periodSelect.options.length - 1].value;
             }
         }
     }
-    setDefaultPeriod(); // Вызываем функцию сразу при загрузке страницы
-    // =================================================================
-
-    // Инициализация Choices.js (после установки значения по умолчанию)
-    const choices = new Choices(serviceSelectElement, {
-        searchResultLimit: 10,
-        itemSelectText: 'Нажмите для выбора',
-        placeholder: true,
-    });
+    setDefaultPeriod();
 
     function validatePeriod() {
         const selectedPeriodStr = periodSelect.value;
         const selectedDate = parsePeriodStringJS(selectedPeriodStr);
         if (!selectedDate) return;
-
         const today = new Date();
         const startOfCurrentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-        
         const periodContainer = periodSelect.closest('.form-group').querySelector('.choices__inner');
-
         if (selectedDate < startOfCurrentMonth) {
             periodWarning.textContent = 'Внимание: выбран прейскурант за прошедший месяц.';
             if (periodContainer) periodContainer.classList.add('is-invalid');
@@ -87,26 +73,28 @@ document.addEventListener('DOMContentLoaded', function() {
         const isSingleUser = service && service.includes('1 пользователь');
         const totalAccountsText = document.getElementById('total-accounts').textContent || '0';
         const totalAccounts = parseInt(totalAccountsText.replace(/\s/g, '')) || 0;
-        
         const levelsContainer = levelsBody.closest('.levels-container');
         let isValid = true;
         
+        levelsWarning.textContent = '';
+        if (levelsContainer) levelsContainer.classList.remove('is-invalid');
+        calculateBtn.disabled = false;
+
         if (isSingleUser && totalAccounts > 1) {
             levelsWarning.textContent = 'Этот тарифный план является однопользовательским.';
             if (levelsContainer) levelsContainer.classList.add('is-invalid');
             calculateBtn.disabled = true;
             isValid = false;
-        } else {
-            levelsWarning.textContent = '';
-            if (levelsContainer) levelsContainer.classList.remove('is-invalid');
-            calculateBtn.disabled = false;
+        } 
+        else if (!isSingleUser && totalAccounts === 1 && service) {
+            levelsWarning.textContent = 'Внимание: для многопользовательского тарифа выбран только 1 пользователь.';
         }
+        
         return isValid;
     }
 
     function updateLiveTotals() {
-        let totalAccounts = 0;
-        let totalMinutes = 0;
+        let totalAccounts = 0, totalMinutes = 0;
         levelInputs.forEach(input => {
             const accounts = parseInt(input.value) || 0;
             const level = input.dataset.level;
@@ -159,7 +147,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // --- Вешаем обработчики событий ---
+    // --- Вешаем обработчики ---
     serviceSelectElement.addEventListener('change', updateLevels);
     periodSelect.addEventListener('change', validatePeriod);
     fixationMonthsInput.addEventListener('input', () => {
@@ -168,7 +156,6 @@ document.addEventListener('DOMContentLoaded', function() {
         fixationCoefficientInput.value = coefficient.toFixed(2);
     });
     
-    // Вызываем проверку периода для установленного по умолчанию значения
     validatePeriod();
 
     // --- Обработчик кнопки "Рассчитать" ---
@@ -190,7 +177,6 @@ document.addEventListener('DOMContentLoaded', function() {
         resultContainer.innerHTML = '';
         prepaymentMonthsInput.classList.remove('is-invalid');
         
-        validatePeriod();
         if (!validateUserCount()) {
             calculateBtn.disabled = true;
             calculateBtn.textContent = 'Рассчитать';
@@ -225,6 +211,26 @@ document.addEventListener('DOMContentLoaded', function() {
                 const summary = data.price_summary;
                 const totals = data.totals;
                 let warningHtml = data.warning ? `<p class="error">${data.warning}</p>` : '';
+
+                // --- НОВАЯ ЛОГИКА ФОРМИРОВАНИЯ HTML ---
+                let discountedRowHtml = '';
+                if (discount_percent > 0) {
+                    discountedRowHtml = `
+                        <div class="price-summary-row">Итого со скидкой</div>
+                        <div class="price-summary-row">${summary.discounted_period.toFixed(2).replace('.', ',')} руб.</div>
+                        <div class="price-summary-row">${summary.discounted_monthly.toFixed(2).replace('.', ',')} руб.</div>
+                    `;
+                }
+
+                let fixedRowHtml = '';
+                if (fixation_months > 0) {
+                    fixedRowHtml = `
+                        <div class="price-summary-row total-row">Итого с фиксацией</div>
+                        <div class="price-summary-row total-row"><strong>${summary.fixed_period.toFixed(2).replace('.', ',')} руб.</strong></div>
+                        <div class="price-summary-row total-row"><strong>${summary.fixed_monthly.toFixed(2).replace('.', ',')} руб.</strong></div>
+                    `;
+                }
+                
                 resultContainer.innerHTML = `
                     ${warningHtml}
                     <h4>Итоговый расчет для ${totals.accounts} пользователей:</h4>
@@ -235,12 +241,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         <div class="price-summary-row">По прейскуранту</div>
                         <div class="price-summary-row">${summary.list_period.toFixed(2).replace('.', ',')} руб.</div>
                         <div class="price-summary-row">${summary.list_monthly.toFixed(2).replace('.', ',')} руб.</div>
-                        <div class="price-summary-row">Итого со скидкой</div>
-                        <div class="price-summary-row">${summary.discounted_period.toFixed(2).replace('.', ',')} руб.</div>
-                        <div class="price-summary-row">${summary.discounted_monthly.toFixed(2).replace('.', ',')} руб.</div>
-                        <div class="price-summary-row total-row">Итого с фиксацией</div>
-                        <div class="price-summary-row total-row"><strong>${summary.fixed_period.toFixed(2).replace('.', ',')} руб.</strong></div>
-                        <div class="price-summary-row total-row"><strong>${summary.fixed_monthly.toFixed(2).replace('.', ',')} руб.</strong></div>
+                        ${discountedRowHtml}
+                        ${fixedRowHtml}
                     </div>
                 `;
             } else {

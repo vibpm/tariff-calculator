@@ -9,7 +9,10 @@ from typing import Optional, List, Dict
 from datetime import datetime, date
 import json
 
-# --- Модели данных ---
+# ===== НОВОЕ: Импортируем наш файл с логикой =====
+import logic
+
+# --- Модели данных (без изменений) ---
 class LevelInput(BaseModel):
     level: str
     accounts: int
@@ -22,22 +25,17 @@ class CalculationInput(BaseModel):
     discount_percent: float = 0.0
     fixation_months: int = 0
 
-# --- Инициализация ---
+# --- Инициализация (без изменений) ---
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-# --- Глобальные переменные и функции ---
+# --- Глобальные переменные и функции (без изменений) ---
 df_prices = None
 MONTH_MAP = {
     'янв': 1, 'фев': 2, 'мар': 3, 'апр': 4, 'май': 5, 'июн': 6,
     'июл': 7, 'авг': 8, 'сен': 9, 'окт': 10, 'ноя': 11, 'дек': 12
 }
-FIXATION_COEFFICIENT_MAP = {
-    1: 1.0, 2: 1.02, 3: 1.04, 4: 1.05, 5: 1.06, 6: 1.07,
-    7: 1.08, 8: 1.09, 9: 1.11, 10: 1.12, 11: 1.13, 12: 1.14
-}
-
 def parse_period_string(period_str: str) -> datetime:
     try:
         month_abbr, year_part = period_str.lower().split('.')
@@ -52,7 +50,6 @@ def load_data():
     global df_prices
     filepath = 'data_export/pricelist.csv'
     try:
-        print(f"Попытка прочитать и обработать файл: {filepath}...")
         df_prices = pd.read_csv(
             filepath, sep=';', on_bad_lines='skip', 
             encoding='utf-8', decimal=','
@@ -98,7 +95,7 @@ async def get_main_page(request: Request):
     return templates.TemplateResponse("index.html", {
         "request": request, "services": services, "levels": levels,
         "periods": periods, "minutes_map_json": json.dumps(minutes_map),
-        "fixation_map_json": json.dumps(FIXATION_COEFFICIENT_MAP)
+        "fixation_map_json": json.dumps(logic.FIXATION_COEFFICIENT_MAP) # Берем константу из logic.py
     })
 
 @app.get("/get_levels_for_service/{service_name}")
@@ -133,80 +130,32 @@ async def handle_calculation(data: CalculationInput):
         return {"error": f"Тарифный план '{data.service}' является однопользовательским. Выбрано пользователей: {total_accounts}."}
 
     warning_message = None
+    if not is_single_user_service and total_accounts == 1:
+        warning_message = "Внимание! Выбран многопользовательский тариф, но указан только 1 пользователь."
+
     try:
         selected_period_date = parse_period_string(data.period).date()
         today = date.today()
         start_of_current_month = today.replace(day=1)
         if selected_period_date < start_of_current_month:
-            warning_message = "Внимание! Используется прейскурант за прошедший месяц."
+            date_warning = "Используется прейскурант за прошедший месяц."
+            if warning_message:
+                warning_message += f" {date_warning}"
+            else:
+                warning_message = date_warning
     except Exception as e:
         print(f"Не удалось проверить дату периода: {e}")
     # --- Конец валидации ---
-
-    # --- Новая логика расчета, в точности копирующая Excel ---
-    level_results = []
-    discount_multiplier = 1 - (data.discount_percent / 100.0)
-    fixation_coefficient = FIXATION_COEFFICIENT_MAP.get(data.fixation_months, 1.0)
-    VAT_RATE = 1.2
-
-    for level_input in data.levels:
-        if level_input.accounts <= 0: continue
-        try:
-            result_df = df_prices.loc[
-                (df_prices['Сервис'] == data.service) &
-                (df_prices['Уровень'] == level_input.level) &
-                (df_prices['Аккаунтов'] == level_input.accounts) &
-                (df_prices['Период'] == data.period)
-            ]
-            if not result_df.empty:
-                found_row = result_df.iloc[0]
-                price_without_vat_per_user = found_row.get('Стоимость без НДС', 0.0)
-                price_for_level_without_vat = price_without_vat_per_user * level_input.accounts
-                
-                list_price_with_vat = round(price_for_level_without_vat * VAT_RATE, 2)
-                
-                discounted_price_without_vat_raw = price_for_level_without_vat * discount_multiplier
-                discounted_price_with_vat = round(round(discounted_price_without_vat_raw, 2) * VAT_RATE, 2)
-
-                fixed_price_without_vat = round(discounted_price_without_vat_raw * fixation_coefficient, 2)
-                fixed_price_with_vat = round(fixed_price_without_vat * VAT_RATE, 2)
-                
-                level_results.append({
-                    "list_price": list_price_with_vat,
-                    "discounted_price": discounted_price_with_vat,
-                    "fixed_price": fixed_price_with_vat,
-                })
-        except Exception as e:
-            print(f"Ошибка при расчете для уровня '{level_input.level}': {e}")
-            raise HTTPException(status_code=500, detail=f"Внутренняя ошибка сервера.")
-
-    if not level_results and total_accounts > 0:
-         return {"error": "Не удалось найти тарифы для указанных позиций."}
-
-    total_list_price_monthly = sum(item['list_price'] for item in level_results)
-    total_discounted_price_monthly = sum(item['discounted_price'] for item in level_results)
-    total_fixed_price_monthly = sum(item['fixed_price'] for item in level_results)
     
-    prepayment_months = data.prepayment_months if data.prepayment_months > 0 else 1
-
-    price_period_list = total_list_price_monthly * prepayment_months
-    price_period_discounted = total_discounted_price_monthly * prepayment_months
-    price_period_fixed = total_fixed_price_monthly * prepayment_months
-
-    # --- Формирование ответа ---
-    response_data = {
-        "price_summary": {
-            "list_monthly": float(round(total_list_price_monthly, 2)),
-            "list_period": float(round(price_period_list, 2)),
-            "discounted_monthly": float(round(total_discounted_price_monthly, 2)),
-            "discounted_period": float(round(price_period_discounted, 2)),
-            "fixed_monthly": float(round(total_fixed_price_monthly, 2)),
-            "fixed_period": float(round(price_period_fixed, 2))
-        },
-        "totals": { "accounts": int(total_accounts) }
-    }
+    # Вызываем нашу новую функцию из logic.py
+    calculation_result = logic.run_calculation(data.dict(), df_prices)
     
+    if calculation_result.get("price_summary") is None:
+        return {"error": "Не удалось найти тарифы для указанных позиций."}
+
+    # Добавляем к результату информацию, которая не относится к расчетам
+    calculation_result["totals"] = { "accounts": int(total_accounts) }
     if warning_message:
-        response_data["warning"] = warning_message
+        calculation_result["warning"] = warning_message
         
-    return response_data
+    return calculation_result
