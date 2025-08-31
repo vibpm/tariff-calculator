@@ -57,14 +57,14 @@ input[readonly] {
 }
 .choices__inner.is-invalid { border-color: var(--error-color); }
 /* --- Стилизация кнопки --- */
-button {
+button.btn-primary {
     width: 100%; padding: 12px 20px; margin-top: 10px; font-size: 16px; font-weight: 700;
     color: #fff; background-color: var(--primary-color); border: none; border-radius: var(--border-radius);
     cursor: pointer; transition: background-color 0.2s ease, transform 0.1s ease;
 }
-button:hover { background-color: #3a7ac8; }
-button:active { transform: scale(0.98); }
-button:disabled { background-color: #a0c3e8; cursor: not-allowed; }
+button.btn-primary:hover { background-color: #3a7ac8; }
+button.btn-primary:active { transform: scale(0.98); }
+button.btn-primary:disabled { background-color: #a0c3e8; cursor: not-allowed; }
 /* --- Стилизация блока с уровнями --- */
 .levels-container {
     border: 1px solid var(--border-color); border-radius: var(--border-radius);
@@ -171,4 +171,19 @@ button:disabled { background-color: #a0c3e8; cursor: not-allowed; }
 }
 #calculation-steps p {
     margin: 0 0 8px 0;
+}
+button.secondary-btn {
+    background-color: #f4f7f9;
+    color: var(--primary-color);
+    border: 1px solid var(--border-color);
+    font-weight: 500;
+}
+button.secondary-btn:hover {
+    background-color: #e9eef2;
+}
+.card-actions {
+    padding: 0 30px 20px 30px;
+    background-color: var(--background-color);
+    border-top: 1px solid var(--border-color);
+    text-align: center;
 }

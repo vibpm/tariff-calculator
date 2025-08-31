@@ -1,7 +1,9 @@
 fastapi
 uvicorn
 pandas
-jinja2
 pydantic
-choices
 python-multipart
+jinja2
+docxtpl
+choices
+lxml 

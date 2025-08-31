@@ -78,21 +78,26 @@
                         <input type="text" id="fixation_coefficient" value="1.0" readonly>
                     </div>
                 </div>
-                <button id="calculate-btn">Рассчитать</button>
+                <!-- ===== ИЗМЕНЕНИЕ ЗДЕСЬ: Добавлен class="btn-primary" ===== -->
+                <button id="calculate-btn" class="btn-primary">Рассчитать</button>
             </main>
 
             <footer id="result-container" class="card-footer">
                 <!-- Основной результат появится здесь -->
             </footer>
 
-            <!-- ===== НОВЫЙ БЛОК для пошагового расчета ===== -->
+            <div class="card-actions" id="result-actions-container" hidden>
+                <!-- ===== ИЗМЕНЕНИЕ ЗДЕСЬ: Добавлен class="btn-primary" ===== -->
+                <button id="download-btn" class="btn-primary">Скачать коммерческое предложение</button>
+            </div>
+
             <details id="calculation-details-container" class="card-details" hidden>
                 <summary>Показать пошаговый расчет</summary>
                 <div id="calculation-steps">
                     <!-- Шаги расчета появятся здесь -->
                 </div>
             </details>
-            <!-- ============================================= -->
+
         </div>
     </div>
 

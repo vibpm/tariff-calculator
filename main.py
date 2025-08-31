@@ -1,16 +1,21 @@
-# main.py
+# main.py (полная обновленная версия)
+
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse # <-- ДОБАВЛЕН StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 import pandas as pd
-from typing import Optional, List, Dict
+from typing import Optional, List
 from datetime import datetime, date
 import json
-import logic
+from urllib.parse import quote
 
-# --- Модели данных ---
+# --- НАШИ МОДУЛИ ---
+import logic
+import document_generator # <-- ДОБАВЛЕН НАШ НОВЫЙ МОДУЛЬ
+
+# --- Модели данных (без изменений) ---
 class LevelInput(BaseModel):
     level: str
     accounts: int
@@ -77,6 +82,7 @@ def load_data():
 async def get_main_page(request: Request):
     if df_prices is None or df_prices.empty:
         return templates.TemplateResponse("error.html", {"request": request, "error_message": "Данные не загружены."})
+    
     try:
         services = sorted(df_prices.dropna(subset=['Уровень'])['Сервис'].unique().tolist())
         levels_from_file = df_prices['Уровень'].dropna().unique().tolist()
@@ -87,14 +93,22 @@ async def get_main_page(request: Request):
         minutes_map = {}
         minutes_df = df_prices[['Уровень', 'Минут']].dropna().drop_duplicates('Уровень').set_index('Уровень')
         minutes_map = minutes_df['Минут'].astype(int).to_dict()
+
+        # ==========================================================
+        # ИЗМЕНЕНИЕ ЗДЕСЬ: Конвертируем Decimal в float для JSON
+        # ==========================================================
+        fixation_map_for_json = {
+            key: float(value) for key, value in logic.FIXATION_COEFFICIENT_MAP.items()
+        }
+
+        return templates.TemplateResponse("index.html", {
+            "request": request, "services": services, "levels": levels,
+            "periods": periods, "minutes_map_json": json.dumps(minutes_map),
+            "fixation_map_json": json.dumps(fixation_map_for_json) # Используем новую версию
+        })
+
     except KeyError as e:
         return templates.TemplateResponse("error.html", {"request": request, "error_message": f"Ошибка в данных: отсутствует столбец: {e}"})
-    
-    return templates.TemplateResponse("index.html", {
-        "request": request, "services": services, "levels": levels,
-        "periods": periods, "minutes_map_json": json.dumps(minutes_map),
-        "fixation_map_json": json.dumps(logic.FIXATION_COEFFICIENT_MAP)
-    })
 
 @app.get("/get_levels_for_service/{service_name}")
 async def get_levels_for_service(service_name: str):
@@ -143,17 +157,71 @@ async def handle_calculation(data: CalculationInput):
                 warning_message = date_warning
     except Exception as e:
         print(f"Не удалось проверить дату периода: {e}")
-    # --- Конец валидации ---
     
-    # Вызываем нашу новую функцию из logic.py
+    # ==========================================================
+    # ИЗМЕНЕНИЕ ЗДЕСЬ: Обрабатываем новую структуру ответа от logic.py
+    # ==========================================================
     calculation_result = logic.run_calculation(data.dict(), df_prices)
     
     if calculation_result.get("price_summary") is None:
         return {"error": "Не удалось найти тарифы для указанных позиций."}
+    
+    context = calculation_result.get("calculation_context", {})
+    
+    final_response = {
+        "price_summary": calculation_result["price_summary"],
+        "totals": { "accounts": context.get("total_users", 0) },
+        "calculation_context": context # Передаем весь контекст на фронт
+    }
 
-    # Добавляем к результату информацию, которая не относится к расчетам
-    calculation_result["totals"] = { "accounts": int(total_accounts) }
     if warning_message:
-        calculation_result["warning"] = warning_message
+        final_response["warning"] = warning_message
         
-    return calculation_result
+    return final_response
+
+# ==========================================================
+# НОВЫЙ ЭНДПОИНТ: Для скачивания коммерческого предложения
+# ==========================================================
+@app.post("/download_offer")
+async def download_offer(data: CalculationInput):
+    if df_prices is None:
+        raise HTTPException(status_code=500, detail="Данные прайс-листа не загружены.")
+        
+    # 1. Выполняем расчеты, чтобы получить контекст
+    calculation_result = logic.run_calculation(data.dict(), df_prices)
+    
+    context = calculation_result.get("calculation_context")
+    if not context:
+        raise HTTPException(status_code=404, detail="Не удалось рассчитать данные для формирования предложения.")
+        
+    # Дополняем контекст данными
+    context['current_date'] = datetime.now().strftime("%d.%m.%Y")
+    
+    # 2. Генерируем документ
+    document_stream = document_generator.create_offer_document(context)
+    
+    if not document_stream:
+        raise HTTPException(status_code=500, detail="Произошла ошибка при создании документа.")
+        
+    # 3. Отправляем файл пользователю (с правильным кодированием имени файла)
+    service_name_slug = context.get('service_name', 'offer').replace('/', '_')
+    date_str = context['current_date']
+    
+    # Создаем имя файла с кириллицей
+    original_filename = f"КП {service_name_slug} от {date_str}.docx"
+    
+    # Кодируем имя файла для HTTP-заголовка
+    encoded_filename = quote(original_filename)
+    
+    media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    
+    # Формируем специальный заголовок, который понимают все современные браузеры
+    headers = {
+        'Content-Disposition': f"attachment; filename*=UTF-8''{encoded_filename}"
+    }
+    
+    return StreamingResponse(
+        document_stream, 
+        media_type=media_type, 
+        headers=headers
+    )
