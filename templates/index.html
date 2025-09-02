@@ -60,25 +60,46 @@
                 
                 <div id="levels-warning" class="validation-message"></div>
 
-                <div class="options-group">
+                <div class="options-container">
+                    <div class="form-group">
+                        <label for="promotion">Акция</label>
+                        <select id="promotion" disabled>
+                            <option value="no_promotion">Нет акции</option>
+                        </select>
+                    </div>
+
+                    <!-- ===== ИЗМЕНЕНИЕ ЗДЕСЬ: Добавлен блок для Условия 2 ===== -->
+                    <div class="form-group">
+                        <label for="promotion_condition2">Дополнительное условие</label>
+                        <input type="text" id="promotion_condition2" value="-" readonly>
+                    </div>
+                    <!-- ======================================================== -->
+
+                    <div class="form-group">
+                        <label for="promotion_discount">Скидка по акции, %</label>
+                        <input type="text" id="promotion_discount" value="-" readonly>
+                    </div>
                     <div class="form-group">
                         <label for="prepayment_months">Период предоплаты, мес</label>
                         <input type="number" id="prepayment_months" value="1" min="1">
                     </div>
+
                     <div class="form-group">
                         <label for="discount_percent">Скидка, %</label>
                         <input type="number" id="discount_percent" value="0" min="0" max="100" step="0.1">
                     </div>
-                    <div class="form-group">
-                        <label for="fixation_months">Период фиксации, мес</label>
-                        <input type="number" id="fixation_months" value="0" min="0" max="12">
-                    </div>
-                    <div class="form-group">
-                        <label for="fixation_coefficient">Коэффициент фиксации</label>
-                        <input type="text" id="fixation_coefficient" value="1.0" readonly>
+
+                    <div class="options-group">
+                         <div class="form-group">
+                            <label for="fixation_months">Период фиксации, мес</label>
+                            <input type="number" id="fixation_months" value="0" min="0" max="12">
+                        </div>
+                        <div class="form-group">
+                            <label for="fixation_coefficient">Коэффициент фиксации</label>
+                            <input type="text" id="fixation_coefficient" value="1.0" readonly>
+                        </div>
                     </div>
                 </div>
-                <!-- ===== ИЗМЕНЕНИЕ ЗДЕСЬ: Добавлен class="btn-primary" ===== -->
                 <button id="calculate-btn" class="btn-primary">Рассчитать</button>
             </main>
 
@@ -87,7 +108,6 @@
             </footer>
 
             <div class="card-actions" id="result-actions-container" hidden>
-                <!-- ===== ИЗМЕНЕНИЕ ЗДЕСЬ: Добавлен class="btn-primary" ===== -->
                 <button id="download-btn" class="btn-primary">Скачать коммерческое предложение</button>
             </div>
 

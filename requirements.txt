@@ -6,4 +6,5 @@ python-multipart
 jinja2
 docxtpl
 choices
-lxml 
+lxml
+openpyxl
