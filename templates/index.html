@@ -61,22 +61,29 @@
                 <div id="levels-warning" class="validation-message"></div>
 
                 <div class="options-container">
-                    <div class="form-group">
-                        <label for="promotion">Акция</label>
-                        <select id="promotion" disabled>
-                            <option value="no_promotion">Нет акции</option>
-                        </select>
-                    </div>
+                    
+                    <!-- ===== НАЧАЛО ИЗМЕНЕНИЙ ===== -->
+                    <!-- Этот div-контейнер позволяет нам управлять всеми полями акции одновременно -->
+                    <div id="promotion-container">
+                        <div class="form-group">
+                            <label for="promotion">Акция</label>
+                            <select id="promotion" disabled>
+                                <option value="no_promotion">Нет акции</option>
+                            </select>
+                        </div>
 
-                    <div class="form-group">
-                        <label for="promotion_condition2">Дополнительное условие</label>
-                        <input type="text" id="promotion_condition2" value="-" readonly>
-                    </div>
+                        <div class="form-group">
+                            <label for="promotion_condition2">Дополнительное условие</label>
+                            <input type="text" id="promotion_condition2" value="-" readonly>
+                        </div>
 
-                    <div class="form-group">
-                        <label for="promotion_discount">Скидка по акции, %</label>
-                        <input type="text" id="promotion_discount" value="-" readonly>
+                        <div class="form-group">
+                            <label for="promotion_discount">Скидка по акции, %</label>
+                            <input type="text" id="promotion_discount" value="-" readonly>
+                        </div>
                     </div>
+                    <!-- ===== КОНЕЦ ИЗМЕНЕНИЙ ===== -->
+                    
                     <div class="form-group">
                         <label for="prepayment_months">Период предоплаты, мес</label>
                         <div id="prepayment-container">

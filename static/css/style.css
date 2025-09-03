@@ -219,5 +219,5 @@ button.secondary-btn:hover {
     margin-top: 0;
 }
 .hidden {
-    display: none;
+    display: none !important;
 }

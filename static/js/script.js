@@ -1,4 +1,4 @@
-// --- Полная версия static/js/script.js ---
+// --- Полная версия static/js/script.js с новой логикой видимости акций ---
 
 document.addEventListener('DOMContentLoaded', function() {
     
@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const serviceChoices = new Choices(serviceSelectElement, { searchResultLimit: 10, itemSelectText: 'Нажмите для выбора', placeholder: true });
     
+    // Для доступности (Accessibility)
     const serviceChoicesElement = serviceSelectElement.closest('.choices');
     if (serviceChoicesElement) {
         const searchInput = serviceChoicesElement.querySelector('input.choices__input');
@@ -32,6 +33,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const promotionSelect = document.getElementById('promotion');
     const promotionDiscountInput = document.getElementById('promotion_discount');
     const promotionCondition2Input = document.getElementById('promotion_condition2');
+
+    // НОВЫЙ БЛОК: Получаем контейнер для всех полей акции для удобного скрытия/показа
+    const promotionContainer = document.getElementById('promotion-container');
     
     let allPromotionsData = {};
     let lastCalculationData = null; 
@@ -40,17 +44,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 
-    function toggleFixationFieldsVisibility() {
-        const selectedService = serviceChoices.getValue(true) || '';
-        const isLdService = selectedService.includes('ЛД');
-        fixationBlock.classList.toggle('hidden', isLdService);
-        if (isLdService) {
-            fixationMonthsInput.value = 0;
-            fixationMonthsInput.dispatchEvent(new Event('input')); 
-        }
+    const JS_MONTH_MAP = { 'янв': 0, 'фев': 1, 'мар': 2, 'апр': 3, 'май': 4, 'июн': 5, 'июл': 6, 'авг': 7, 'сен': 8, 'окт': 9, 'ноя': 10, 'дек': 11 };
+    
+    function formatNumber(num) {
+        return num.toFixed(2).replace('.', ',');
     }
 
-    const JS_MONTH_MAP = { 'янв': 0, 'фев': 1, 'мар': 2, 'апр': 3, 'май': 4, 'июн': 5, 'июл': 6, 'авг': 7, 'сен': 8, 'окт': 9, 'ноя': 10, 'дек': 11 };
     function parsePeriodStringJS(periodStr) { try { if(!periodStr) return null; const [monthAbbr, yearPart] = periodStr.toLowerCase().split('.'); const monthNum = JS_MONTH_MAP[monthAbbr]; const year = 2000 + parseInt(yearPart); return new Date(year, monthNum, 1); } catch (e) { return null; } }
     
     function setDefaultPeriod() {
@@ -63,8 +62,58 @@ document.addEventListener('DOMContentLoaded', function() {
         if (bestChoice) { periodSelect.value = bestChoice.value; }
     }
 
-    function validatePeriod() { const selectedPeriodStr = periodSelect.value; const selectedDate = parsePeriodStringJS(selectedPeriodStr); if (!selectedDate) return; const today = new Date(); const startOfCurrentMonth = new Date(today.getFullYear(), today.getMonth(), 1); if (selectedDate < startOfCurrentMonth) { periodWarning.textContent = 'Внимание: выбран прейскурант за прошедший месяц.'; periodSelect.classList.add('is-invalid'); } else { periodWarning.textContent = ''; periodSelect.classList.remove('is-invalid'); } }
-    function validateUserCount() { const service = serviceChoices.getValue(true); const isSingleUser = service && service.includes('1 пользователь'); const totalAccountsText = document.getElementById('total-accounts').textContent || '0'; const totalAccounts = parseInt(totalAccountsText.replace(/\s/g, '')) || 0; const levelsContainer = levelsBody.closest('.levels-container'); let isValid = true; levelsWarning.textContent = ''; if (levelsContainer) levelsContainer.classList.remove('is-invalid'); calculateBtn.disabled = false; if (isSingleUser && totalAccounts > 1) { levelsWarning.textContent = 'Этот тарифный план является однопользовательским.'; if (levelsContainer) levelsContainer.classList.add('is-invalid'); calculateBtn.disabled = true; isValid = false; } else if (!isSingleUser && totalAccounts === 1 && service) { levelsWarning.textContent = 'Внимание: для многопользовательского тарифа выбран только 1 пользователь.'; } return isValid; }
+    // НОВЫЙ БЛОК: Функция для управления видимостью блока с акциями
+    /**
+     * Проверяет, входит ли выбранный период в разрешенный для акций диапазон
+     * (текущий месяц, следующий и +1 месяц).
+     */
+    function updatePromotionBlockVisibility() {
+        const selectedPeriodStr = periodSelect.value;
+        const selectedDate = parsePeriodStringJS(selectedPeriodStr);
+
+        if (!selectedDate || !promotionContainer) {
+            if (promotionContainer) promotionContainer.classList.add('hidden');
+            return;
+        }
+        
+        const today = new Date();
+        // Устанавливаем день на 1, чтобы избежать проблем с разным количеством дней в месяцах
+        today.setDate(1); 
+        today.setHours(0, 0, 0, 0);
+
+        // Определяем начало текущего, следующего и +1 месяца
+        const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+        const nextMonthStart = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+        const monthAfterNextStart = new Date(today.getFullYear(), today.getMonth() + 2, 1);
+        
+        const allowedMonths = [
+            currentMonthStart.getTime(),
+            nextMonthStart.getTime(),
+            monthAfterNextStart.getTime()
+        ];
+        
+        if (allowedMonths.includes(selectedDate.getTime())) {
+            // Период разрешен, показываем блок
+            promotionContainer.classList.remove('hidden');
+        } else {
+            // Период не разрешен, скрываем блок и сбрасываем акцию
+            promotionContainer.classList.add('hidden');
+            promotionSelect.value = 'no_promotion';
+            // Вызываем handlePromotionChange, чтобы он сбросил все поля до дефолтных
+            handlePromotionChange(); 
+        }
+    }
+
+    // --- Функции для работы с DOM и UI ---
+    function toggleFixationFieldsVisibility() {
+        const selectedService = serviceChoices.getValue(true) || '';
+        const isLdService = selectedService.includes('ЛД');
+        fixationBlock.classList.toggle('hidden', isLdService);
+        if (isLdService) {
+            fixationMonthsInput.value = 0;
+            fixationMonthsInput.dispatchEvent(new Event('input')); 
+        }
+    }
 
     function updatePromoDetailsFromPrepayment() {
         const promoId = promotionSelect.value;
@@ -112,7 +161,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const selectedPromoId = promotionSelect.value;
         const promoData = allPromotionsData[selectedPromoId];
 
-        if (promoData) {
+        if (promoData && promoData.variants.length > 0) {
             showPrepaymentSelect(promoData);
             updatePromoDetailsFromPrepayment();
             discountPercentInput.value = 0;
@@ -124,7 +173,8 @@ document.addEventListener('DOMContentLoaded', function() {
             discountPercentInput.disabled = false;
         }
     }
-    
+
+    // --- Функции для работы с данными и API ---
     async function updateAvailablePromotions() {
         const service = serviceChoices.getValue(true);
         const selectedLevels = Array.from(levelInputs)
@@ -257,39 +307,145 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error("Ошибка при получении уровней:", error);
         }
     }
+
+    // --- ВАЛИДАЦИЯ ---
+    function validatePeriod() { const selectedPeriodStr = periodSelect.value; const selectedDate = parsePeriodStringJS(selectedPeriodStr); if (!selectedDate) return; const today = new Date(); const startOfCurrentMonth = new Date(today.getFullYear(), today.getMonth(), 1); if (selectedDate < startOfCurrentMonth) { periodWarning.textContent = 'Внимание: выбран прейскурант за прошедший месяц.'; periodSelect.classList.add('is-invalid'); } else { periodWarning.textContent = ''; periodSelect.classList.remove('is-invalid'); } }
     
-    // --- ОБРАБОТЧИКИ СОБЫТИЙ ---
-    serviceSelectElement.addEventListener('change', updateLevels);
-    promotionSelect.addEventListener('change', handlePromotionChange);
-    periodSelect.addEventListener('change', validatePeriod);
-    fixationMonthsInput.addEventListener('input', () => { const months = parseInt(fixationMonthsInput.value) || 0; const coefficient = FIXATION_COEFFICIENT_MAP[months] || 1.0; fixationCoefficientInput.value = coefficient.toFixed(2); });
+    function validateUserCount() { const service = serviceChoices.getValue(true); const isSingleUser = service && service.includes('1 пользователь'); const totalAccountsText = document.getElementById('total-accounts').textContent || '0'; const totalAccounts = parseInt(totalAccountsText.replace(/\s/g, '')) || 0; const levelsContainer = levelsBody.closest('.levels-container'); let isValid = true; levelsWarning.textContent = ''; if (levelsContainer) levelsContainer.classList.remove('is-invalid'); calculateBtn.disabled = false; if (isSingleUser && totalAccounts > 1) { levelsWarning.textContent = 'Этот тарифный план является однопользовательским.'; if (levelsContainer) levelsContainer.classList.add('is-invalid'); calculateBtn.disabled = true; isValid = false; } else if (!isSingleUser && totalAccounts === 1 && service) { levelsWarning.textContent = 'Внимание: для многопользовательского тарифа выбран только 1 пользователь.'; } return isValid; }
+
     
-    calculateBtn.addEventListener('click', async () => {
-        const requestPayload = { period: periodSelect.value, service: serviceChoices.getValue(true), prepayment_months: parseInt(prepaymentInput.value, 10), discount_percent: parseFloat(document.getElementById('discount_percent').value) || 0, fixation_months: parseInt(fixationMonthsInput.value) || 0, levels: Array.from(levelInputs).map(input => ({ level: input.dataset.level, accounts: parseInt(input.value) || 0 })).filter(item => item.accounts > 0), promotion_id: promotionSelect.value };
-        calculateBtn.disabled = true; calculateBtn.textContent = 'Расчет...'; resultContainer.innerHTML = ''; prepaymentInput.classList.remove('is-invalid');
+    // ================================================================
+    // --- РЕФАКТОРИНГ-БЛОК ЛОГИКИ РАСЧЕТА ---
+    // ================================================================
+    
+    /**
+     * Собирает все данные с формы в один объект.
+     */
+    function getCalculationPayload() {
+        return {
+            period: periodSelect.value,
+            service: serviceChoices.getValue(true),
+            prepayment_months: parseInt(prepaymentInput.value, 10),
+            discount_percent: parseFloat(discountPercentInput.value) || 0,
+            fixation_months: parseInt(fixationMonthsInput.value) || 0,
+            levels: Array.from(levelInputs)
+                .map(input => ({ level: input.dataset.level, accounts: parseInt(input.value) || 0 }))
+                .filter(item => item.accounts > 0),
+            promotion_id: promotionSelect.value
+        };
+    }
+
+    /**
+     * Проверяет собранные данные на корректность.
+     */
+    function validatePayload(payload) {
+        prepaymentInput.classList.remove('is-invalid');
+        if (!payload.service || payload.levels.length === 0) {
+            return "Пожалуйста, выберите тарифный план и укажите количество пользователей.";
+        }
+        const isLDService = payload.service.includes('ЛД');
+        if (isLDService && payload.prepayment_months < 4) {
+            prepaymentInput.classList.add('is-invalid');
+            return "Внимание! Для ТП 'ЛД' предоплата не может быть меньше 4 месяцев.";
+        }
+        if (!validateUserCount()) {
+            return "Проверьте количество пользователей.";
+        }
+        return null; // Нет ошибок
+    }
+
+    /**
+     * Отображает результат успешного расчета.
+     */
+    function renderResults(data, requestPayload) {
+        const { price_summary: summary, totals } = data;
+        const { prepayment_months, promotion_id, discount_percent, fixation_months } = requestPayload;
+
+        const isPromoApplied = promotion_id && promotion_id !== 'no_promotion';
+        const showDiscountRow = (discount_percent > 0 || isPromoApplied);
+        
+        let warningHtml = data.warning ? `<p class="error">${data.warning}</p>` : '';
+
+        const tableHtml = `
+            <h4>Итоговый расчет для ${totals.accounts} пользователей:</h4>
+            <div class="price-summary-table">
+                <div class="price-summary-header">Цена</div>
+                <div class="price-summary-header">За период (${prepayment_months} мес.)</div>
+                <div class="price-summary-header">Ежемесячно</div>
+                
+                <div class="price-summary-row">По прейскуранту</div>
+                <div class="price-summary-row">${formatNumber(summary.list_period)} руб.</div>
+                <div class="price-summary-row">${formatNumber(summary.list_monthly)} руб.</div>
+                
+                ${showDiscountRow ? `
+                <div class="price-summary-row">Итого со скидкой</div>
+                <div class="price-summary-row">${formatNumber(summary.discounted_period)} руб.</div>
+                <div class="price-summary-row">${formatNumber(summary.discounted_monthly)} руб.</div>
+                ` : ''}
+                
+                ${fixation_months > 0 ? `
+                <div class="price-summary-row total-row">Итого с фиксацией</div>
+                <div class="price-summary-row total-row"><strong>${formatNumber(summary.fixed_period)} руб.</strong></div>
+                <div class="price-summary-row total-row"><strong>${formatNumber(summary.fixed_monthly)} руб.</strong></div>
+                ` : ''}
+            </div>
+        `;
+        resultContainer.innerHTML = warningHtml + tableHtml;
+        resultActionsContainer.hidden = false;
+        resultActionsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    /**
+     * Отображает сообщение об ошибке.
+     */
+    function renderError(errorMessage) {
+        resultContainer.innerHTML = `<p class="error">${errorMessage}</p>`;
+    }
+
+    /**
+     * Главный обработчик события расчета.
+     */
+    async function handleCalculation() {
+        const requestPayload = getCalculationPayload();
+        
+        const validationError = validatePayload(requestPayload);
+        if (validationError) {
+            renderError(validationError);
+            return;
+        }
+
+        calculateBtn.disabled = true;
+        calculateBtn.textContent = 'Расчет...';
+        resultContainer.innerHTML = '';
         resultActionsContainer.hidden = true;
         lastCalculationData = null;
-        if (!validateUserCount() || !requestPayload.service || requestPayload.levels.length === 0) { resultContainer.innerHTML = `<p class="error">Пожалуйста, выберите тарифный план и укажите количество пользователей.</p>`; calculateBtn.disabled = false; calculateBtn.textContent = 'Рассчитать'; return; }
-        const isLDService = requestPayload.service.includes('ЛД');
-        if (isLDService && requestPayload.prepayment_months < 4) { resultContainer.innerHTML = `<p class="error">Внимание! Для ТП 'ЛД' предоплата не может быть меньше 4 месяцев.</p>`; prepaymentInput.classList.add('is-invalid'); calculateBtn.disabled = false; calculateBtn.textContent = 'Рассчитать'; return; }
+
         try {
-            const response = await fetch('/calculate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(requestPayload) });
+            const response = await fetch('/calculate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestPayload)
+            });
             const data = await response.json();
-            if (response.ok && !data.error) {
-                const summary = data.price_summary; const totals = data.totals; const prepayment_months = requestPayload.prepayment_months;
-                const isPromoApplied = requestPayload.promotion_id && requestPayload.promotion_id !== 'no_promotion';
-                const discount_percent = isPromoApplied ? (allPromotionsData[requestPayload.promotion_id]?.variants.find(v => v.months === prepayment_months)?.discount_percent || 0) : requestPayload.discount_percent;
-                const fixation_months = requestPayload.fixation_months;
-                let warningHtml = data.warning ? `<p class="error">${data.warning}</p>` : '';
-                const showDiscountRow = discount_percent > 0 || isPromoApplied;
-                resultContainer.innerHTML = ` ${warningHtml} <h4>Итоговый расчет для ${totals.accounts} пользователей:</h4> <div class="price-summary-table"> <div class="price-summary-header">Цена</div> <div class="price-summary-header">За период (${prepayment_months} мес.)</div> <div class="price-summary-header">Ежемесячно</div> <div class="price-summary-row">По прейскуранту</div> <div class="price-summary-row">${summary.list_period.toFixed(2).replace('.', ',')} руб.</div> <div class="price-summary-row">${summary.list_monthly.toFixed(2).replace('.', ',')} руб.</div> ${showDiscountRow ? ` <div class="price-summary-row">Итого со скидкой</div> <div class="price-summary-row">${summary.discounted_period.toFixed(2).replace('.', ',')} руб.</div> <div class="price-summary-row">${summary.discounted_monthly.toFixed(2).replace('.', ',')} руб.</div> ` : ''} ${fixation_months > 0 ? ` <div class="price-summary-row total-row">Итого с фиксацией</div> <div class="price-summary-row total-row"><strong>${summary.fixed_period.toFixed(2).replace('.', ',')} руб.</strong></div> <div class="price-summary-row total-row"><strong>${summary.fixed_monthly.toFixed(2).replace('.', ',')} руб.</strong></div> ` : ''} </div> `;
-                lastCalculationData = requestPayload;
-                resultActionsContainer.hidden = false;
-                resultActionsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            } else { resultContainer.innerHTML = `<p class="error">${data.error || data.detail}</p>`; }
-        } catch(e) { resultContainer.innerHTML = `<p class="error">Ошибка сети или обработки ответа.</p>`; }
-        finally { calculateBtn.disabled = false; calculateBtn.textContent = 'Рассчитать'; }
-    });
+
+            if (!response.ok || data.error) {
+                throw new Error(data.error || data.detail || 'Неизвестная ошибка сервера');
+            }
+
+            renderResults(data, requestPayload);
+            lastCalculationData = requestPayload;
+
+        } catch (error) {
+            renderError(error.message || "Ошибка сети или обработки ответа.");
+        } finally {
+            calculateBtn.disabled = false;
+            calculateBtn.textContent = 'Рассчитать';
+        }
+    }
+
+    // --- ОБРАБОТЧИКИ СОБЫТИЙ ---
+    
+    calculateBtn.addEventListener('click', handleCalculation);
 
     downloadBtn.addEventListener('click', async () => {
         if (!lastCalculationData) { alert("Сначала выполните расчет."); return; }
@@ -309,9 +465,23 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (error) { console.error('Ошибка при скачивании файла:', error); alert('Произошла ошибка при скачивании файла.'); } 
         finally { downloadBtn.disabled = false; downloadBtn.textContent = 'Скачать коммерческое предложение'; }
     });
+
+    serviceSelectElement.addEventListener('change', updateLevels);
+    promotionSelect.addEventListener('change', handlePromotionChange);
+
+    // ИЗМЕНЕНО: Добавляем вызов новой функции в обработчик
+    periodSelect.addEventListener('change', () => {
+        validatePeriod();
+        updatePromotionBlockVisibility();
+    });
+
+    fixationMonthsInput.addEventListener('input', () => { const months = parseInt(fixationMonthsInput.value) || 0; const coefficient = FIXATION_COEFFICIENT_MAP[months] || 1.0; fixationCoefficientInput.value = coefficient.toFixed(2); });
+    
     
     // --- ПЕРВИЧНАЯ ЗАГРУЗКА ---
     setDefaultPeriod();
     validatePeriod();
     toggleFixationFieldsVisibility();
+    // ИЗМЕНЕНО: Вызываем новую функцию при старте, чтобы установить правильное состояние
+    updatePromotionBlockVisibility(); 
 });
