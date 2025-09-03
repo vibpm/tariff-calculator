@@ -144,3 +144,39 @@ def test_complex_vip_with_fixation_6_months():
 
     assert summary['fixed_period'] == approx(34555.20)
     assert summary['fixed_monthly'] == approx(2879.60)
+    # ===== НОВЫЙ ТЕСТ =====
+def test_ld_service_monthly_price_rounding():
+    """
+    Проверяет корректность округления ежемесячной цены для ЛД-тарифов.
+    Ежемесячная цена должна считаться как (цена_без_ндс * 1.2) с округлением,
+    а не как (цена_за_период / кол-во_месяцев).
+    """
+    
+    # --- 1. Arrange ---
+    mock_prices_data = [
+        {'Сервис': 'Пакет Программ Главный Бухгалтер, Podpis, ilex.Накладные (1 пользователь, ЛД)', 
+         'Уровень': 'Оптимальный', 'Аккаунтов': 1, 'Стоимость без НДС': 79.17, 'Период': 'окт.25'},
+    ]
+    df_prices = pd.DataFrame(mock_prices_data)
+    
+    user_input_data = {
+        "period": "окт.25",
+        "service": "Пакет Программ Главный Бухгалтер, Podpis, ilex.Накладные (1 пользователь, ЛД)",
+        "levels": [{"level": "Оптимальный", "accounts": 1}],
+        "prepayment_months": 4,
+        "discount_percent": 0.0,
+        "fixation_months": 0,
+        "promotion_id": None,
+    }
+
+    # --- 2. Act ---
+    result = run_calculation(data=user_input_data, df_prices=df_prices, promotion_info=None)
+    
+    # --- 3. Assert ---
+    summary = result.get("price_summary")
+    assert summary is not None
+    
+    # Проверяем, что итоговая цена за период осталась прежней (380.02)
+    assert summary['list_period'] == approx(380.02)
+    # А вот ежемесячная цена теперь должна быть 95.00, а не 95.01
+    assert summary['list_monthly'] == approx(95.00)

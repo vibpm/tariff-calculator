@@ -1,4 +1,4 @@
-# logic.py
+# C:\excel-to-web\logic.py
 
 import pandas as pd
 from typing import Dict, Any, List, Optional, Tuple
@@ -213,23 +213,37 @@ def run_calculation(
     fixed_period = discounted_period
     if fixation_months > 0:
         if is_ld_service:
-            # Для ЛД сохраняем логику, где фиксация может считаться с ручной скидкой
             fixed_period = calculate_ld_fixed_price(level_prices_info, data)
         else:
-            # Для не-ЛД фиксация считается по "общему правилу", которое использует ручную скидку, а не акционную.
-            # Если выбрана акция, js на фронте ставит ручную скидку в 0, что и воспроизводит логику Excel.
             fixed_monthly = calculate_non_ld_fixed_price(level_prices_info, data)
             fixed_period = fixed_monthly * D_prepayment_months
 
+    # ===== НАЧАЛО БЛОКА ИЗМЕНЕНИЙ =====
     # --- Формирование итогового словаря ---
+
+    # Вычисляем list_monthly по умолчанию, как раньше
+    final_list_monthly = round_decimal(list_period / D_prepayment_months)
+
+    # Пересчитываем 'list_monthly' по "эталонной" логике, если это ЛД-сервис
+    if is_ld_service:
+        # 1. Считаем стоимость одного месяца БЕЗ НДС
+        base_monthly_wo_vat = Decimal('0')
+        for item in level_prices_info:
+            price = Decimal(str(item['price_without_vat_per_user'])) * Decimal(str(item['accounts']))
+            base_monthly_wo_vat += price
+        
+        # 2. Применяем НДС и ОКРУГЛЯЕМ. Это дает нам правильную месячную цену.
+        final_list_monthly = round_decimal(base_monthly_wo_vat * VAT_RATE)
+
     price_summary = {
-        "list_monthly": float(round_decimal(list_period / D_prepayment_months)),
-        "list_period": float(round_decimal(list_period)),
+        "list_monthly": float(final_list_monthly),
+        "list_period": float(list_period),
         "discounted_monthly": float(round_decimal(discounted_period / D_prepayment_months)),
         "discounted_period": float(round_decimal(discounted_period)),
         "fixed_monthly": float(round_decimal(fixed_period / D_prepayment_months)),
         "fixed_period": float(round_decimal(fixed_period))
     }
+    # ===== КОНЕЦ БЛОКА ИЗМЕНЕНИЙ =====
     
     context = {
         "service_name": data.get('service', 'N/A'), "prepayment_months": prepayment_months,
