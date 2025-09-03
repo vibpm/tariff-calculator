@@ -1,3 +1,5 @@
+# main.py
+
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -5,10 +7,9 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 import pandas as pd
 from typing import List, Union, Optional
-from datetime import datetime, date
+from datetime import datetime
 import json
 from urllib.parse import quote
-import os
 from pathlib import Path
 
 # --- НАШИ МОДУЛИ ---
@@ -29,10 +30,12 @@ class CalculationInput(BaseModel):
     fixation_months: int = 0
     promotion_id: Optional[Union[int, str]] = None
 
-class PromotionRequest(BaseModel):
+# <-- НОВАЯ МОДЕЛЬ ДАННЫХ для запроса всех акций -->
+class PromotionAllRequest(BaseModel):
     service: str
     levels: List[str]
-    prepayment_months: int
+    
+# <-- СТАРАЯ МОДЕЛЬ PromotionRequest УДАЛЕНА -->
 
 # --- Инициализация ---
 app = FastAPI()
@@ -64,26 +67,32 @@ def parse_period_string(period_str: str) -> datetime:
 def load_data():
     global df_prices, df_promotions
     DATA_DIR = BASE_DIR / "data_export"
-    # ... (код загрузки данных без изменений) ...
-    # --- 1. Загрузка прайс-листа ---
-    filepath_prices = DATA_DIR / "pricelist.csv"
+
+    # --- 1. Загрузка прайс-листа (код без изменений) ---
+    filepath_prices = DATA_DIR / "pricelist.xlsx"
     try:
-        df_prices = pd.read_csv(filepath_prices, sep=';', on_bad_lines='skip', encoding='utf-8', decimal=',')
+        string_columns = { 'Сервис': str, 'Уровень': str, 'Минут': str }
+        df_prices = pd.read_excel(filepath_prices, dtype=string_columns)
         df_prices.dropna(axis=1, how='all', inplace=True)
         df_prices.dropna(axis=0, how='all', inplace=True)
         df_prices.columns = df_prices.columns.str.strip()
-        for col in ['Сервис', 'Уровень', 'Период']:
+        for col in ['Сервис', 'Уровень']:
             if col in df_prices.columns: df_prices[col] = df_prices[col].str.strip()
-        if 'Аккаунтов' in df_prices.columns: df_prices['Аккаунтов'] = df_prices['Аккаунтов'].fillna(0).astype(int)
+        if 'Период' in df_prices.columns:
+            df_prices['Период'] = pd.to_datetime(df_prices['Период'], errors='coerce')
+            df_prices.dropna(subset=['Период'], inplace=True)
+            RU_MONTHS_MAP = { 1: 'янв', 2: 'фев', 3: 'мар', 4: 'апр', 5: 'май', 6: 'июн', 7: 'июл', 8: 'авг', 9: 'сен', 10: 'окт', 11: 'ноя', 12: 'дек' }
+            df_prices['Период'] = df_prices['Период'].apply( lambda dt: f"{RU_MONTHS_MAP[dt.month]}.{str(dt.year)[-2:]}" )
+        if 'Аккаунтов' in df_prices.columns:
+            df_prices['Аккаунтов'] = pd.to_numeric(df_prices['Аккаунтов'], errors='coerce').fillna(0).astype(int)
         if 'Минут' in df_prices.columns:
-            df_prices['Минут'] = df_prices['Минут'].astype(str).str.split('/').str[0].str.strip()
-            df_prices['Минут'] = pd.to_numeric(df_prices['Минут'], errors='coerce').fillna(0).astype(int)
+            df_prices['Минут'] = df_prices['Минут'].astype(str).str.replace(r'\.0$', '', regex=True)
         print(f"✓ Прайс-лист '{filepath_prices}' успешно загружен и обработан.")
     except Exception as e:
         print(f"!!! КРИТИЧЕСКАЯ ОШИБКА при чтении прайс-листа: {e}")
         df_prices = None
 
-    # --- 2. Загрузка акций ---
+    # --- 2. Загрузка акций (код без изменений) ---
     filepath_promos = DATA_DIR / "promotions.xlsx"
     try:
         df_promotions = pd.read_excel(filepath_promos)
@@ -105,7 +114,7 @@ def load_data():
 
 @app.get("/", response_class=HTMLResponse)
 async def get_main_page(request: Request):
-    # ... (код без изменений) ...
+    # ... (код эндпоинта без изменений)
     if df_prices is None or df_prices.empty:
         return templates.TemplateResponse("error.html", {"request": request, "error_message": "Данные не загружены."})
     try:
@@ -115,13 +124,10 @@ async def get_main_page(request: Request):
         levels = sorted(levels_from_file, key=lambda level: (custom_order.index(level) if level in custom_order else float('inf'), level))
         periods_list = df_prices['Период'].dropna().unique().tolist()
         periods = sorted(periods_list, key=parse_period_string)
-        minutes_map = {}
-        minutes_df = df_prices[['Уровень', 'Минут']].dropna().drop_duplicates('Уровень').set_index('Уровень')
-        minutes_map = minutes_df['Минут'].astype(int).to_dict()
         fixation_map_for_json = {key: float(value) for key, value in logic.FIXATION_COEFFICIENT_MAP.items()}
         return templates.TemplateResponse("index.html", {
             "request": request, "services": services, "levels": levels,
-            "periods": periods, "minutes_map_json": json.dumps(minutes_map),
+            "periods": periods,
             "fixation_map_json": json.dumps(fixation_map_for_json)
         })
     except KeyError as e:
@@ -129,70 +135,92 @@ async def get_main_page(request: Request):
 
 @app.get("/get_levels_for_service/{service_name}")
 async def get_levels_for_service(service_name: str):
-    # ... (код без изменений) ...
-    if df_prices is None: return []
+    # ... (код эндпоинта без изменений)
+    if df_prices is None:
+        return []
     try:
         filtered_df = df_prices[df_prices['Сервис'] == service_name]
-        levels_from_file = filtered_df['Уровень'].dropna().unique().tolist()
+        levels_with_minutes_df = filtered_df[['Уровень', 'Минут']].copy()
+        levels_with_minutes_df.dropna(subset=['Уровень'], inplace=True)
+        levels_with_minutes_df.drop_duplicates(subset=['Уровень'], keep='first', inplace=True)
         custom_order = ["Эксперт", "Оптимальный", "Оптимальный Плюс", "Минимальный", "Базовый"]
-        sorted_levels = sorted(levels_from_file, key=lambda level: (custom_order.index(level) if level in custom_order else float('inf'), level))
+        levels_list = levels_with_minutes_df.to_dict('records')
+        def sort_key(level_dict):
+            level_name = level_dict['Уровень']
+            return (custom_order.index(level_name) if level_name in custom_order else float('inf'), level_name)
+        sorted_levels = sorted(levels_list, key=sort_key)
         return sorted_levels
     except Exception as e:
         print(f"Ошибка при получении уровней для сервиса '{service_name}': {e}")
         return []
 
-@app.post("/get_promotions")
-async def get_promotions_for_service(data: PromotionRequest):
-    # ... (код без изменений, мы его уже исправили) ...
-    available_promotions = [{"id": "no_promotion", "name": "Нет акции"}]
+# <-- СТАРЫЙ ЭНДПОИНТ /get_promotions УДАЛЕН -->
+
+# <-- НОВЫЙ ЭНДПОИНТ для получения всех вариантов акций -->
+@app.post("/get_all_promotions_for_selection")
+async def get_all_promotions_for_selection(data: PromotionAllRequest):
+    """
+    Находит все доступные акции для сервиса и уровней,
+    группируя их и возвращая все возможные варианты периодов.
+    """
     if df_promotions is None or df_promotions.empty:
-        return available_promotions
+        return {}
     try:
         service_lower = data.service.lower()
         levels_lower = [level.lower() for level in data.levels]
+        
+        # Фильтруем акции по сервису и уровням, но БЕЗ учета месяцев
         filtered_df = df_promotions[
             (df_promotions['ТП'].str.lower() == service_lower) &
-            (df_promotions['Уровень'].str.lower().isin(levels_lower)) &
-            (df_promotions['Месяцев'] == data.prepayment_months)
+            (df_promotions['Уровень'].str.lower().isin(levels_lower))
         ]
-        if not filtered_df.empty:
-            for promo_name, group in filtered_df.groupby('Приказ'):
-                promo_representative = group.iloc[0]
-                applicable_levels = group['Уровень'].unique().tolist()
-                promo_data = {
-                    "id": promo_name, 
-                    "name": promo_name,
-                    "discount_percent": promo_representative['Условие1'] * 100,
-                    "months": int(promo_representative['Месяцев']),
-                    "condition2": promo_representative['Условие2'],
-                    "applicable_levels": applicable_levels
-                }
-                available_promotions.append(promo_data)
-        return available_promotions
+
+        if filtered_df.empty:
+            return {}
+
+        # Группируем по названию акции ('Приказ')
+        promotions_map = {}
+        for promo_name, group in filtered_df.groupby('Приказ'):
+            promo_levels = group['Уровень'].unique().tolist()
+            
+            variants = []
+            # Собираем все уникальные варианты месяцев для этой акции
+            for _, row in group.drop_duplicates(subset=['Месяцев']).iterrows():
+                variants.append({
+                    "months": int(row['Месяцев']),
+                    "discount_percent": row['Условие1'] * 100,
+                    "condition2": str(row['Условие2']) if pd.notna(row['Условие2']) else None
+                })
+            
+            # Сортируем варианты по количеству месяцев
+            variants.sort(key=lambda x: x['months'])
+
+            promotions_map[promo_name] = {
+                "id": promo_name,
+                "name": promo_name,
+                "applicable_levels": promo_levels,
+                "variants": variants
+            }
+        
+        return promotions_map
     except Exception as e:
-        print(f"!!! ОШИБКА при поиске акций для '{data.service}': {e}")
-        return [{"id": "no_promotion", "name": "Нет акции"}]
+        print(f"!!! ОШИБКА при поиске всех акций для '{data.service}': {e}")
+        return {}
 
 @app.post("/calculate")
 async def handle_calculation(data: CalculationInput):
+    # ... (код эндпоинта без изменений)
     if df_prices is None: raise HTTPException(status_code=500, detail="Данные прайс-листа не загружены.")
-
-    # --- Валидация (без изменений) ---
-    # ...
-
-    # ===== ИЗМЕНЕНИЕ ЗДЕСЬ: Новый, точный поиск акции для расчета =====
+    
     promotion_details = None
     if data.promotion_id is not None and data.promotion_id != 'no_promotion':
         if not df_promotions.empty:
-            # Ищем акцию по тем же трем параметрам, что и на фронтенде
             service_lower = data.service.lower()
             levels_lower = [level.level.lower() for level in data.levels]
-            
             promo_df = df_promotions[
                 (df_promotions['ТП'].str.lower() == service_lower) &
                 (df_promotions['Уровень'].str.lower().isin(levels_lower)) &
                 (df_promotions['Месяцев'] == data.prepayment_months) &
-                # Дополнительно фильтруем по названию приказа, чтобы быть на 100% уверенными
                 (df_promotions['Приказ'] == data.promotion_id) 
             ]
             if not promo_df.empty:
@@ -203,8 +231,7 @@ async def handle_calculation(data: CalculationInput):
         df_prices,
         promotion_details=promotion_details
     )
-    # ====================================================================
-
+    
     if calculation_result.get("price_summary") is None:
         return {"error": "Не удалось найти тарифы для указанных позиций."}
     
@@ -214,14 +241,13 @@ async def handle_calculation(data: CalculationInput):
         "totals": { "accounts": context.get("total_users", 0) },
         "calculation_context": context
     }
-    # ... (warning_message и return без изменений) ...
     return final_response
 
 @app.post("/download_offer")
 async def download_offer(data: CalculationInput):
+    # ... (код эндпоинта без изменений)
     if df_prices is None: raise HTTPException(status_code=500, detail="Данные прайс-листа не загружены.")
         
-    # ===== ИЗМЕНЕНИЕ ЗДЕСЬ: Синхронизируем логику с /calculate =====
     promotion_details = None
     if data.promotion_id is not None and data.promotion_id != 'no_promotion':
         if not df_promotions.empty:
@@ -241,7 +267,6 @@ async def download_offer(data: CalculationInput):
         df_prices,
         promotion_details=promotion_details
     )
-    # ===============================================================
     
     context = calculation_result.get("calculation_context")
     if not context:

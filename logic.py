@@ -17,7 +17,6 @@ FIXATION_COEFFICIENT_MAP = {
 
 # --- Функция поиска ---
 def find_price_tiers(data: Dict[str, Any], df_prices: pd.DataFrame) -> List[Dict[str, Any]]:
-    # ... (код без изменений) ...
     level_prices_info = []
     for level_input in data.get('levels', []):
         accounts = level_input.get('accounts', 0)
@@ -78,16 +77,34 @@ def calculate_non_ld_fixed_price(level_prices_info: List[Dict[str, Any]], data: 
     return total_price
 
 def calculate_ld_list_price(level_prices_info: List[Dict[str, Any]], data: Dict[str, Any]) -> Decimal:
-    # ... (старый код) ...
-    return Decimal('0')
+    if not level_prices_info: return Decimal('0')
+    price_per_user = Decimal(str(level_prices_info[0]['price_without_vat_per_user']))
+    prepayment = Decimal(str(data.get('prepayment_months', 1) or 1))
+    total_price = (price_per_user * prepayment) * VAT_RATE
+    return round_decimal(total_price)
 
 def calculate_ld_discounted_price(level_prices_info: List[Dict[str, Any]], data: Dict[str, Any]) -> Decimal:
-    # ... (старый код) ...
-    return Decimal('0')
+    if not level_prices_info: return Decimal('0')
+    price_per_user = Decimal(str(level_prices_info[0]['price_without_vat_per_user']))
+    prepayment = Decimal(str(data.get('prepayment_months', 1) or 1))
+    discount = Decimal('1') - (Decimal(str(data.get('discount_percent', 0))) / Decimal('100'))
+    with_discount = round_decimal(price_per_user * discount)
+    total_price = (with_discount * prepayment) * VAT_RATE
+    return round_decimal(total_price)
 
 def calculate_ld_fixed_price(level_prices_info: List[Dict[str, Any]], data: Dict[str, Any]) -> Decimal:
-    # ... (старый код) ...
-    return Decimal('0')
+    if not level_prices_info: return Decimal('0')
+    fix_months = data.get('fixation_months', 0)
+    if fix_months == 0:
+        return calculate_ld_discounted_price(level_prices_info, data)
+    
+    price_per_user = Decimal(str(level_prices_info[0]['price_without_vat_per_user']))
+    prepayment = Decimal(str(data.get('prepayment_months', 1) or 1))
+    discount = Decimal('1') - (Decimal(str(data.get('discount_percent', 0))) / Decimal('100'))
+    fix_coeff = FIXATION_COEFFICIENT_MAP.get(fix_months, Decimal('1.0'))
+    with_fix = round_decimal(price_per_user * discount * fix_coeff)
+    total_price = (with_fix * prepayment) * VAT_RATE
+    return round_decimal(total_price)
 
 
 # ================================================================
@@ -148,11 +165,9 @@ def _calculate_discounted_price_with_promotion(
                     if month_num <= special_months:
                         current_discount_multiplier = Decimal('1') - special_discount
             
-            # Шаг 1: Цена без НДС * кол-во * множитель
             price_for_level_with_discount_wo_vat = (price_per_user_wo_vat * accounts) * current_discount_multiplier
-            # Шаг 2: Округляем до 2 знаков
             rounded_price_wo_vat = round_decimal(price_for_level_with_discount_wo_vat)
-            # Шаг 3 и 4: Умножаем на НДС и снова округляем
+            
             if not is_ld_service:
                 price_for_level_final = round_decimal(rounded_price_wo_vat * VAT_RATE)
             else:
@@ -183,16 +198,20 @@ def run_calculation(
     df_prices: pd.DataFrame,
     promotion_details: Optional[List[Dict[str, Any]]] = None
 ) -> Dict[str, Any]:
-    # ... (код без изменений) ...
+    
     is_ld_service = "ЛД" in data.get('service', '')
     prepayment_months = data.get('prepayment_months', 1) or 1
+    
     if promotion_details and promotion_details[0].get('Месяцев'):
         prepayment_months = int(promotion_details[0]['Месяцев'])
+    
     D_prepayment_months = Decimal(str(prepayment_months))
+    
     level_prices_info = find_price_tiers(data, df_prices)
     if not level_prices_info:
         return {"price_summary": None, "calculation_context": None}
 
+    # --- РАСЧЕТ ПО ПРЕЙСКУРАНТУ ---
     list_monthly_base = Decimal('0')
     for item in level_prices_info:
         price = Decimal(str(item['price_without_vat_per_user'])) * Decimal(str(item['accounts']))
@@ -205,6 +224,7 @@ def run_calculation(
     else:
         list_period = list_monthly_base * D_prepayment_months
     
+    # --- РАСЧЕТ СО СКИДКОЙ И ФИКСАЦИЕЙ ---
     if promotion_details:
         discounted_period = _calculate_discounted_price_with_promotion(level_prices_info, data, promotion_details, is_ld_service)
         fixed_period = discounted_period 
@@ -218,6 +238,7 @@ def run_calculation(
             discounted_period = discounted_monthly * D_prepayment_months
             fixed_period = fixed_monthly * D_prepayment_months
     
+    # --- Формирование итогового словаря ---
     price_summary = {
         "list_monthly": float(round_decimal(list_period / D_prepayment_months)),
         "list_period": float(round_decimal(list_period)),

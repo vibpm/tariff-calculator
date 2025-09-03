@@ -44,15 +44,15 @@
                 
                 <div class="levels-container">
                     <div class="levels-header">
-                        <div>Уровень</div>
-                        <div>Пользователи</div>
-                        <div>Минуты</div>
+                        <div><strong>Уровень</strong></div>
+                        <div><strong>Пользователи</strong></div>
+                        <div><strong>Минуты</strong></div>
                     </div>
                     <div id="levels-body">
                         <div class="level-placeholder">Сначала выберите тарифный план</div>
                     </div>
                     <div class="levels-footer">
-                        <div>Всего:</div>
+                        <div><strong>Всего:</strong></div>
                         <div id="total-accounts">0</div>
                         <div id="total-minutes">0</div>
                     </div>
@@ -68,12 +68,10 @@
                         </select>
                     </div>
 
-                    <!-- ===== ИЗМЕНЕНИЕ ЗДЕСЬ: Добавлен блок для Условия 2 ===== -->
                     <div class="form-group">
                         <label for="promotion_condition2">Дополнительное условие</label>
                         <input type="text" id="promotion_condition2" value="-" readonly>
                     </div>
-                    <!-- ======================================================== -->
 
                     <div class="form-group">
                         <label for="promotion_discount">Скидка по акции, %</label>
@@ -81,7 +79,9 @@
                     </div>
                     <div class="form-group">
                         <label for="prepayment_months">Период предоплаты, мес</label>
-                        <input type="number" id="prepayment_months" value="1" min="1">
+                        <div id="prepayment-container">
+                            <input type="number" id="prepayment_months" value="1" min="1">
+                        </div>
                     </div>
 
                     <div class="form-group">
@@ -89,7 +89,7 @@
                         <input type="number" id="discount_percent" value="0" min="0" max="100" step="0.1">
                     </div>
 
-                    <div class="options-group">
+                    <div class="options-group" id="fixation-block">
                          <div class="form-group">
                             <label for="fixation_months">Период фиксации, мес</label>
                             <input type="number" id="fixation_months" value="0" min="0" max="12">
@@ -103,9 +103,7 @@
                 <button id="calculate-btn" class="btn-primary">Рассчитать</button>
             </main>
 
-            <footer id="result-container" class="card-footer">
-                <!-- Основной результат появится здесь -->
-            </footer>
+            <footer id="result-container" class="card-footer"></footer>
 
             <div class="card-actions" id="result-actions-container" hidden>
                 <button id="download-btn" class="btn-primary">Скачать коммерческое предложение</button>
@@ -113,16 +111,13 @@
 
             <details id="calculation-details-container" class="card-details" hidden>
                 <summary>Показать пошаговый расчет</summary>
-                <div id="calculation-steps">
-                    <!-- Шаги расчета появятся здесь -->
-                </div>
+                <div id="calculation-steps"></div>
             </details>
 
         </div>
     </div>
 
     <script>
-        const MINUTE_MAP = {{ minutes_map_json | safe }};
         const FIXATION_COEFFICIENT_MAP = {{ fixation_map_json | safe }};
     </script>
     
