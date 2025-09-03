@@ -1,0 +1,18 @@
+# flyctl launch added from .gitignore
+# Python
+**\__pycache__
+**\*.pyc]
+
+# Environment
+**\.env
+**\venv
+**\env
+
+# IDE
+**\.vscode
+**\.idea
+
+# flyctl launch added from .pytest_cache\.gitignore
+# Created by pytest automatically.
+.pytest_cache\**\*
+fly.toml

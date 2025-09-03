@@ -1,10 +1,17 @@
+# C:\excel-to-web\requirements.txt
+
 fastapi
-uvicorn
+uvicorn[standard]
 pandas
+openpyxl
+python-dateutil
+
+# Библиотеки для работы с документами
+python-docx
+docxcompose
+docxtpl            # <-- ВОТ ОН, НЕДОСТАЮЩИЙ ПАЗЛ
+
+# Остальные зависимости
+jinja2
 pydantic
 python-multipart
-jinja2
-docxtpl
-choices
-lxml
-openpyxl
