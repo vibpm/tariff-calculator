@@ -1,4 +1,4 @@
-# main.py
+# C:\excel-to-web\main.py
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
@@ -11,6 +11,7 @@ from datetime import datetime
 import json
 from urllib.parse import quote
 from pathlib import Path
+from dateutil.relativedelta import relativedelta # <-- ВОТ ДОБАВЛЕННЫЙ ИМПОРТ
 
 # --- НАШИ МОДУЛИ ---
 import logic
@@ -109,14 +110,39 @@ def load_data():
         print(f"!!! КРИТИЧЕСКАЯ ОШИБКА при чтении файла акций: {e}")
         df_promotions = pd.DataFrame()
 
+# --- ===== НАЧАЛО ЗАМЕНЫ ===== ---
 # --- ОБНОВЛЕННАЯ ЦЕНТРАЛИЗОВАННАЯ ФУНКЦИЯ ПОИСКА АКЦИИ ---
 def find_applicable_promotion(
     data: CalculationInput, 
     df_promotions: pd.DataFrame
 ) -> Optional[Dict[str, Any]]:
     """
-    Ищет НАИБОЛЕЕ подходящую акцию с учетом стандартных и "комбо" уровней.
+    Ищет НАИБОЛЕЕ подходящую акцию с учетом стандартных и "комбо" уровней,
+    а также проверяет, разрешено ли применять акцию в текущем месяце.
     """
+    # --- БЛОК ИЗМЕНЕНИЙ ---
+    # Проверка на "сезонность" акции. Бэкенд - единственный источник правды.
+    today = datetime.now()
+    # Устанавливаем день на 1 для корректного сравнения месяцев, обнуляем время
+    current_month_start = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    
+    # +1 и +2 месяца от текущего с помощью relativedelta
+    next_month_start = current_month_start + relativedelta(months=1)
+    month_after_next_start = current_month_start + relativedelta(months=2)
+    
+    allowed_months = [current_month_start, next_month_start, month_after_next_start]
+
+    # Парсим период из запроса пользователя
+    # parse_period_string вернет datetime(1900, 1, 1), если не сможет распарсить,
+    # что заведомо не попадет в наш разрешенный список. Это безопасно.
+    selected_period_date = parse_period_string(data.period).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # Если выбранный период прейскуранта не входит в разрешенные, то акцию применять нельзя.
+    # Это защищает от отправки "хитрых" запросов с фронтенда.
+    if selected_period_date not in allowed_months:
+        return None # Просто молча не находим акцию
+    # --- КОНЕЦ БЛОКА ИЗМЕНЕНИЙ ---
+
     if df_promotions is None or df_promotions.empty or data.promotion_id is None or data.promotion_id == 'no_promotion':
         return None
 
@@ -167,6 +193,8 @@ def find_applicable_promotion(
             }
             
     return best_match
+# --- ===== КОНЕЦ ЗАМЕНЫ ===== ---
+
 
 # --- Маршруты (Endpoints) ---
 
@@ -218,12 +246,6 @@ async def get_all_promotions_for_selection(data: PromotionAllRequest):
         service_lower = data.service.lower()
         levels_lower = [level.lower() for level in data.levels]
         
-        # Фильтруем акции по сервису и уровням
-        # ВАЖНО: для фронтенда оставляем старую, более простую логику,
-        # чтобы показать все возможные акции, а не только "комбо".
-        # Сложная логика выбора будет на бэкенде при расчете.
-        
-        # Находим все акции, где хотя бы один из уровней совпадает
         mask = df_promotions.apply(
             lambda row: (row['ТП'].lower() == service_lower) and any(
                 level_lower in row['Уровень'].lower().replace(" ", "") 
