@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 import pandas as pd
-from typing import List, Union, Optional
+from typing import List, Union, Optional, Dict, Any
 from datetime import datetime
 import json
 from urllib.parse import quote
@@ -30,13 +30,10 @@ class CalculationInput(BaseModel):
     fixation_months: int = 0
     promotion_id: Optional[Union[int, str]] = None
 
-# <-- НОВАЯ МОДЕЛЬ ДАННЫХ для запроса всех акций -->
 class PromotionAllRequest(BaseModel):
     service: str
     levels: List[str]
     
-# <-- СТАРАЯ МОДЕЛЬ PromotionRequest УДАЛЕНА -->
-
 # --- Инициализация ---
 app = FastAPI()
 
@@ -48,11 +45,14 @@ templates = Jinja2Templates(directory=BASE_DIR / "templates")
 df_prices = None
 df_promotions = None
 
-# --- Функции ---
+# --- Вспомогательные функции ---
 MONTH_MAP = {
     'янв': 1, 'фев': 2, 'мар': 3, 'апр': 4, 'май': 5, 'июн': 6,
     'июл': 7, 'авг': 8, 'сен': 9, 'окт': 10, 'ноя': 11, 'дек': 12
 }
+
+# Определяем главный уровень для комбо-акций
+MAIN_LEVEL_NAME = "Эксперт"
 
 def parse_period_string(period_str: str) -> datetime:
     try:
@@ -68,7 +68,7 @@ def load_data():
     global df_prices, df_promotions
     DATA_DIR = BASE_DIR / "data_export"
 
-    # --- 1. Загрузка прайс-листа (код без изменений) ---
+    # --- 1. Загрузка прайс-листа ---
     filepath_prices = DATA_DIR / "pricelist.xlsx"
     try:
         string_columns = { 'Сервис': str, 'Уровень': str, 'Минут': str }
@@ -92,7 +92,7 @@ def load_data():
         print(f"!!! КРИТИЧЕСКАЯ ОШИБКА при чтении прайс-листа: {e}")
         df_prices = None
 
-    # --- 2. Загрузка акций (код без изменений) ---
+    # --- 2. Загрузка акций ---
     filepath_promos = DATA_DIR / "promotions.xlsx"
     try:
         df_promotions = pd.read_excel(filepath_promos)
@@ -109,12 +109,69 @@ def load_data():
         print(f"!!! КРИТИЧЕСКАЯ ОШИБКА при чтении файла акций: {e}")
         df_promotions = pd.DataFrame()
 
+# --- ОБНОВЛЕННАЯ ЦЕНТРАЛИЗОВАННАЯ ФУНКЦИЯ ПОИСКА АКЦИИ ---
+def find_applicable_promotion(
+    data: CalculationInput, 
+    df_promotions: pd.DataFrame
+) -> Optional[Dict[str, Any]]:
+    """
+    Ищет НАИБОЛЕЕ подходящую акцию с учетом стандартных и "комбо" уровней.
+    """
+    if df_promotions is None or df_promotions.empty or data.promotion_id is None or data.promotion_id == 'no_promotion':
+        return None
+
+    user_active_levels_set = {
+        level.level.lower() for level in data.levels if level.accounts > 0
+    }
+    if not user_active_levels_set:
+        return None
+
+    service_lower = data.service.lower()
+    
+    # 1. Находим ВСЕ варианты для данной акции и периода предоплаты
+    candidate_promos = df_promotions[
+        (df_promotions['ТП'].str.lower() == service_lower) &
+        (df_promotions['Приказ'] == data.promotion_id) &
+        (df_promotions['Месяцев'] == data.prepayment_months)
+    ]
+    
+    if candidate_promos.empty:
+        return None
+
+    best_match = None
+    max_matched_levels = 0
+
+    # 2. Итерируемся по всем вариантам и ищем лучший
+    for _, promo_row in candidate_promos.iterrows():
+        promo_level_str = promo_row.get('Уровень', '')
+        
+        required_levels = logic._parse_combo_level(promo_level_str)
+        required_levels_lower_set = {level.lower() for level in required_levels}
+
+        if not required_levels_lower_set.issubset(user_active_levels_set):
+            continue
+
+        is_combo = len(required_levels) > 1
+        if is_combo:
+            main_level_in_promo = MAIN_LEVEL_NAME.lower() in required_levels_lower_set
+            if main_level_in_promo and (MAIN_LEVEL_NAME.lower() not in user_active_levels_set):
+                 continue
+        
+        # 3. Сравниваем, насколько хорош этот вариант
+        current_match_count = len(required_levels_lower_set)
+        if current_match_count > max_matched_levels:
+            max_matched_levels = current_match_count
+            best_match = {
+                "details": promo_row.to_dict(),
+                "applicable_levels": required_levels
+            }
+            
+    return best_match
 
 # --- Маршруты (Endpoints) ---
 
 @app.get("/", response_class=HTMLResponse)
 async def get_main_page(request: Request):
-    # ... (код эндпоинта без изменений)
     if df_prices is None or df_prices.empty:
         return templates.TemplateResponse("error.html", {"request": request, "error_message": "Данные не загружены."})
     try:
@@ -135,7 +192,6 @@ async def get_main_page(request: Request):
 
 @app.get("/get_levels_for_service/{service_name}")
 async def get_levels_for_service(service_name: str):
-    # ... (код эндпоинта без изменений)
     if df_prices is None:
         return []
     try:
@@ -154,37 +210,37 @@ async def get_levels_for_service(service_name: str):
         print(f"Ошибка при получении уровней для сервиса '{service_name}': {e}")
         return []
 
-# <-- СТАРЫЙ ЭНДПОИНТ /get_promotions УДАЛЕН -->
-
-# <-- НОВЫЙ ЭНДПОИНТ для получения всех вариантов акций -->
 @app.post("/get_all_promotions_for_selection")
 async def get_all_promotions_for_selection(data: PromotionAllRequest):
-    """
-    Находит все доступные акции для сервиса и уровней,
-    группируя их и возвращая все возможные варианты периодов.
-    """
     if df_promotions is None or df_promotions.empty:
         return {}
     try:
         service_lower = data.service.lower()
         levels_lower = [level.lower() for level in data.levels]
         
-        # Фильтруем акции по сервису и уровням, но БЕЗ учета месяцев
-        filtered_df = df_promotions[
-            (df_promotions['ТП'].str.lower() == service_lower) &
-            (df_promotions['Уровень'].str.lower().isin(levels_lower))
-        ]
+        # Фильтруем акции по сервису и уровням
+        # ВАЖНО: для фронтенда оставляем старую, более простую логику,
+        # чтобы показать все возможные акции, а не только "комбо".
+        # Сложная логика выбора будет на бэкенде при расчете.
+        
+        # Находим все акции, где хотя бы один из уровней совпадает
+        mask = df_promotions.apply(
+            lambda row: (row['ТП'].lower() == service_lower) and any(
+                level_lower in row['Уровень'].lower().replace(" ", "") 
+                for level_lower in levels_lower
+            ), 
+            axis=1
+        )
+        filtered_df = df_promotions[mask]
 
         if filtered_df.empty:
             return {}
 
-        # Группируем по названию акции ('Приказ')
         promotions_map = {}
         for promo_name, group in filtered_df.groupby('Приказ'):
             promo_levels = group['Уровень'].unique().tolist()
             
             variants = []
-            # Собираем все уникальные варианты месяцев для этой акции
             for _, row in group.drop_duplicates(subset=['Месяцев']).iterrows():
                 variants.append({
                     "months": int(row['Месяцев']),
@@ -192,7 +248,6 @@ async def get_all_promotions_for_selection(data: PromotionAllRequest):
                     "condition2": str(row['Условие2']) if pd.notna(row['Условие2']) else None
                 })
             
-            # Сортируем варианты по количеству месяцев
             variants.sort(key=lambda x: x['months'])
 
             promotions_map[promo_name] = {
@@ -209,27 +264,14 @@ async def get_all_promotions_for_selection(data: PromotionAllRequest):
 
 @app.post("/calculate")
 async def handle_calculation(data: CalculationInput):
-    # ... (код эндпоинта без изменений)
     if df_prices is None: raise HTTPException(status_code=500, detail="Данные прайс-листа не загружены.")
     
-    promotion_details = None
-    if data.promotion_id is not None and data.promotion_id != 'no_promotion':
-        if not df_promotions.empty:
-            service_lower = data.service.lower()
-            levels_lower = [level.level.lower() for level in data.levels]
-            promo_df = df_promotions[
-                (df_promotions['ТП'].str.lower() == service_lower) &
-                (df_promotions['Уровень'].str.lower().isin(levels_lower)) &
-                (df_promotions['Месяцев'] == data.prepayment_months) &
-                (df_promotions['Приказ'] == data.promotion_id) 
-            ]
-            if not promo_df.empty:
-                promotion_details = promo_df.to_dict('records')
-
+    promotion_info = find_applicable_promotion(data, df_promotions)
+    
     calculation_result = logic.run_calculation(
         data.dict(), 
         df_prices,
-        promotion_details=promotion_details
+        promotion_info=promotion_info
     )
     
     if calculation_result.get("price_summary") is None:
@@ -245,27 +287,14 @@ async def handle_calculation(data: CalculationInput):
 
 @app.post("/download_offer")
 async def download_offer(data: CalculationInput):
-    # ... (код эндпоинта без изменений)
     if df_prices is None: raise HTTPException(status_code=500, detail="Данные прайс-листа не загружены.")
         
-    promotion_details = None
-    if data.promotion_id is not None and data.promotion_id != 'no_promotion':
-        if not df_promotions.empty:
-            service_lower = data.service.lower()
-            levels_lower = [level.level.lower() for level in data.levels]
-            promo_df = df_promotions[
-                (df_promotions['ТП'].str.lower() == service_lower) &
-                (df_promotions['Уровень'].str.lower().isin(levels_lower)) &
-                (df_promotions['Месяцев'] == data.prepayment_months) &
-                (df_promotions['Приказ'] == data.promotion_id)
-            ]
-            if not promo_df.empty:
-                promotion_details = promo_df.to_dict('records')
+    promotion_info = find_applicable_promotion(data, df_promotions)
 
     calculation_result = logic.run_calculation(
         data.dict(), 
         df_prices,
-        promotion_details=promotion_details
+        promotion_info=promotion_info
     )
     
     context = calculation_result.get("calculation_context")

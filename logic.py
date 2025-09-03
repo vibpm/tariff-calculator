@@ -1,3 +1,5 @@
+# logic.py
+
 import pandas as pd
 from typing import Dict, Any, List, Optional, Tuple
 from decimal import Decimal, ROUND_HALF_UP
@@ -14,6 +16,42 @@ FIXATION_COEFFICIENT_MAP = {
     1: Decimal('1.0'), 2: Decimal('1.02'), 3: Decimal('1.04'), 4: Decimal('1.05'), 5: Decimal('1.06'), 6: Decimal('1.07'),
     7: Decimal('1.08'), 8: Decimal('1.09'), 9: Decimal('1.11'), 10: Decimal('1.12'), 11: Decimal('1.13'), 12: Decimal('1.14')
 }
+
+# --- НОВЫЙ БЛОК: Логика для разбора "комбо" уровней ---
+# Полный список всех возможных уровней, отсортированный по длине НАОБОРОТ.
+# Это "словарь" для нашего парсера.
+KNOWN_LEVELS = sorted([
+    "Эксперт", 
+    "Оптимальный", 
+    "Оптимальный Плюс", 
+    "Минимальный", 
+    "Базовый"
+], key=len, reverse=True)
+
+def _parse_combo_level(level_string: str) -> List[str]:
+    """
+    Разбирает строку с уровнями ('ЭКСПЕРТОПТИМАЛЬНЫЙ') в список ['Эксперт', 'Оптимальный'].
+    Если разобрать не удалось, возвращает исходную строку как единственный элемент списка.
+    """
+    if not isinstance(level_string, str):
+        return []
+        
+    upper_level_string = level_string.upper().replace(" ", "").replace("/", "")
+    found_levels = []
+    
+    temp_string = upper_level_string
+    for level in KNOWN_LEVELS:
+        upper_known_level = level.upper().replace(" ", "").replace("/", "")
+        if upper_known_level in temp_string:
+            found_levels.append(level)
+            temp_string = temp_string.replace(upper_known_level, "", 1)
+            
+    if not temp_string.strip() and found_levels:
+        return found_levels
+    else:
+        return [level_string]
+# --- КОНЕЦ НОВОГО БЛОКА ---
+
 
 # --- Функция поиска ---
 def find_price_tiers(data: Dict[str, Any], df_prices: pd.DataFrame) -> List[Dict[str, Any]]:
@@ -125,7 +163,8 @@ def _parse_condition2(condition: str) -> Optional[Tuple[int, Decimal]]:
 def _calculate_discounted_price_with_promotion(
     level_prices_info: List[Dict[str, Any]], 
     data: Dict[str, Any],
-    promotion_details: List[Dict[str, Any]],
+    promotion_details: Dict[str, Any],
+    applicable_promo_levels: List[str],
     is_ld_service: bool
 ) -> Decimal:
     
@@ -133,19 +172,19 @@ def _calculate_discounted_price_with_promotion(
     print("ЗАПУСК РАСЧЕТА ПО АКЦИИ (с точной математикой)")
     print("="*50)
 
-    promo_representative = promotion_details[0]
+    promo_representative = promotion_details
     total_period_price_with_vat = Decimal('0')
     prepayment_months = int(promo_representative.get('Месяцев', data.get('prepayment_months', 1)))
     base_discount_multiplier = Decimal('1') - Decimal(str(promo_representative.get('Условие1', 0)))
     special_condition = _parse_condition2(promo_representative.get('Условие2'))
-    promo_levels = {p['Уровень'].lower() for p in promotion_details}
+    promo_levels_set = {level.lower() for level in applicable_promo_levels}
 
     print(f"Акция: {promo_representative.get('Приказ')}")
     print(f"Период: {prepayment_months} мес.")
     print(f"Основная скидка: {promo_representative.get('Условие1') * 100}% (множитель: {base_discount_multiplier})")
     if special_condition: print(f"Спец. условие: {special_condition[0]} мес. со скидкой {special_condition[1] * 100}%")
     else: print("Спец. условие: Нет")
-    print(f"Акция действует на уровни: {promo_levels}")
+    print(f"Акция действует на уровни: {promo_levels_set}")
     print("\n--- НАЧАЛО РАСЧЕТА ПО МЕСЯЦАМ ---")
     
     for month_num in range(1, prepayment_months + 1):
@@ -158,7 +197,7 @@ def _calculate_discounted_price_with_promotion(
             price_per_user_wo_vat = Decimal(str(level['price_without_vat_per_user']))
             
             current_discount_multiplier = Decimal('1')
-            if level_name.lower() in promo_levels:
+            if level_name.lower() in promo_levels_set:
                 current_discount_multiplier = base_discount_multiplier
                 if special_condition:
                     special_months, special_discount = special_condition
@@ -196,14 +235,19 @@ def _calculate_discounted_price_with_promotion(
 def run_calculation(
     data: Dict[str, Any], 
     df_prices: pd.DataFrame,
-    promotion_details: Optional[List[Dict[str, Any]]] = None
+    promotion_info: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     
     is_ld_service = "ЛД" in data.get('service', '')
     prepayment_months = data.get('prepayment_months', 1) or 1
     
-    if promotion_details and promotion_details[0].get('Месяцев'):
-        prepayment_months = int(promotion_details[0]['Месяцев'])
+    promotion_details = None
+    applicable_promo_levels = []
+    if promotion_info:
+        promotion_details = promotion_info.get("details")
+        applicable_promo_levels = promotion_info.get("applicable_levels", [])
+        if promotion_details and promotion_details.get('Месяцев'):
+            prepayment_months = int(promotion_details['Месяцев'])
     
     D_prepayment_months = Decimal(str(prepayment_months))
     
@@ -226,7 +270,9 @@ def run_calculation(
     
     # --- РАСЧЕТ СО СКИДКОЙ И ФИКСАЦИЕЙ ---
     if promotion_details:
-        discounted_period = _calculate_discounted_price_with_promotion(level_prices_info, data, promotion_details, is_ld_service)
+        discounted_period = _calculate_discounted_price_with_promotion(
+            level_prices_info, data, promotion_details, applicable_promo_levels, is_ld_service
+        )
         fixed_period = discounted_period 
     else:
         if is_ld_service:
