@@ -289,3 +289,114 @@ def test_glavbuh_prof_multi_level_with_discount_and_fixation():
 
     assert summary['fixed_period'] == approx(2412.96)
     assert summary['fixed_monthly'] == approx(603.24)
+# ===== НОВЫЙ ТЕСТ ДЛЯ "ГЛАВНЫЙ БУХГАЛТЕР ПРОФ (1 пользователь)" =====
+def test_glavbuh_prof_single_user_with_discount_and_fixation():
+    """
+    Проверяет сценарий для однопользовательского не-ЛД тарифа с ручной скидкой и фиксацией.
+    - ТП: Главный Бухгалтер ПРОФ (1 пользователь)
+    - Уровень: Эксперт (1)
+    - Период: окт.25
+    - Предоплата: 8 мес.
+    - Скидка: 15%
+    - Фиксация: 9 мес.
+    """
+    
+    # --- 1. Arrange (Подготовка) ---
+    
+    # Находим нужную строку в прайс-листе для этого теста
+    mock_prices_data = [
+        {'Сервис': 'Главный Бухгалтер ПРОФ (1 пользователь)', 'Уровень': 'Эксперт', 'Аккаунтов': 1, 'Стоимость без НДС': 406.40, 'Период': 'окт.25'},
+    ]
+    df_prices = pd.DataFrame(mock_prices_data)
+    
+    # Имитируем запрос с фронтенда на основе скриншота
+    user_input_data = {
+        "period": "окт.25",
+        "service": "Главный Бухгалтер ПРОФ (1 пользователь)",
+        "levels": [{"level": "Эксперт", "accounts": 1}],
+        "prepayment_months": 8,
+        "discount_percent": 15.0,
+        "fixation_months": 9,
+        "promotion_id": None, # Акции нет
+    }
+
+    # --- 2. Act (Действие) ---
+    
+    # Вызываем функцию расчета. promotion_info=None, так как акции нет.
+    result = run_calculation(data=user_input_data, df_prices=df_prices, promotion_info=None)
+    
+    # --- 3. Assert (Проверка) ---
+    
+    summary = result.get("price_summary")
+    assert summary is not None
+    
+    # Сверяем каждую цифру с эталоном из Excel
+    assert summary['list_period'] == approx(3901.44)
+    assert summary['list_monthly'] == approx(487.68)
+
+    assert summary['discounted_period'] == approx(3316.24)
+    assert summary['discounted_monthly'] == approx(414.53)
+
+    assert summary['fixed_period'] == approx(3681.04)
+    assert summary['fixed_monthly'] == approx(460.13)
+# ===== НОВЫЙ ТЕСТ ДЛЯ СЦЕНАРИЯ С ПРЕВЫШЕНИЕМ КОЛИЧЕСТВА ПОЛЬЗОВАТЕЛЕЙ =====
+def test_enterprise_over_max_users_with_discount_and_fixation():
+    """
+    Проверяет сценарий, где количество пользователей по каждому уровню
+    превышает максимальное значение в прайс-листе.
+    - ТП: Предприятие
+    - Уровни: Эксперт(20), Оптимальный(30), Минимальный(40)
+    - Период: окт.25
+    - Предоплата: 9 мес.
+    - Скидка: 10%
+    - Фиксация: 11 мес.
+    """
+    
+    # --- 1. Arrange (Подготовка) ---
+    
+    # Нам нужны строки с МАКСИМАЛЬНЫМ количеством аккаунтов для каждого уровня
+    # из прайс-листа 'Предприятие'. Там максимум 10 для Эксперт/Оптимальный и 5 для Минимального.
+    mock_prices_data = [
+        # Тариф для 10 пользователей, так как 20 > 10
+        {'Сервис': 'Предприятие', 'Уровень': 'Эксперт', 'Аккаунтов': 10, 'Стоимость без НДС': 112.50, 'Период': 'окт.25'},
+        # Тариф для 10 пользователей, так как 30 > 10
+        {'Сервис': 'Предприятие', 'Уровень': 'Оптимальный', 'Аккаунтов': 10, 'Стоимость без НДС': 61.18, 'Период': 'окт.25'},
+        # Тариф для 5 пользователей, так как 40 > 5
+        {'Сервис': 'Предприятие', 'Уровень': 'Минимальный', 'Аккаунтов': 5, 'Стоимость без НДС': 33.09, 'Период': 'окт.25'},
+    ]
+    # Создаем DataFrame со всеми возможными тирами, чтобы функция поиска могла работать корректно
+    df_prices = pd.DataFrame(mock_prices_data)
+    
+    # Имитируем запрос с фронтенда
+    user_input_data = {
+        "period": "окт.25",
+        "service": "Предприятие",
+        "levels": [
+            {"level": "Эксперт", "accounts": 20},
+            {"level": "Оптимальный", "accounts": 30},
+            {"level": "Минимальный", "accounts": 40},
+        ],
+        "prepayment_months": 9,
+        "discount_percent": 10.0,
+        "fixation_months": 11,
+        "promotion_id": None,
+    }
+
+    # --- 2. Act (Действие) ---
+    
+    result = run_calculation(data=user_input_data, df_prices=df_prices, promotion_info=None)
+    
+    # --- 3. Assert (Проверка) ---
+    
+    summary = result.get("price_summary")
+    assert summary is not None
+    
+    # Сверяем каждую цифру с эталоном из Excel
+    assert summary['list_period'] == approx(58417.20)
+    assert summary['list_monthly'] == approx(6490.80)
+
+    assert summary['discounted_period'] == approx(52575.48)
+    assert summary['discounted_monthly'] == approx(5841.72)
+
+    assert summary['fixed_period'] == approx(59410.26)
+    assert summary['fixed_monthly'] == approx(6601.14)

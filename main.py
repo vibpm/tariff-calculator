@@ -244,15 +244,27 @@ async def get_all_promotions_for_selection(data: PromotionAllRequest):
         return {}
     try:
         service_lower = data.service.lower()
-        levels_lower = [level.lower() for level in data.levels]
+        user_levels_lower_set = {level.lower() for level in data.levels}
+
+        # Создаем маску (список True/False) для фильтрации DataFrame
+        mask = []
+        for _, row in df_promotions.iterrows():
+            is_match = False
+            # 1. Проверяем совпадение по сервису (ТП)
+            if row['ТП'].lower() == service_lower:
+                # 2. Правильно разбираем строку с уровнями из файла акций
+                promo_levels = logic._parse_combo_level(row['Уровень'])
+                promo_levels_lower_set = {level.lower() for level in promo_levels}
+                
+                # ===== НАЧАЛО ИЗМЕНЕНИЙ =====
+                # 3. Проверяем, что набор уровней пользователя В ТОЧНОСТИ СОВПАДАЕТ
+                #    с набором уровней, для которых предназначена акция.
+                if promo_levels_lower_set == user_levels_lower_set:
+                    is_match = True
+                # ===== КОНЕЦ ИЗМЕНЕНИЙ =====
+            
+            mask.append(is_match)
         
-        mask = df_promotions.apply(
-            lambda row: (row['ТП'].lower() == service_lower) and any(
-                level_lower in row['Уровень'].lower().replace(" ", "") 
-                for level_lower in levels_lower
-            ), 
-            axis=1
-        )
         filtered_df = df_promotions[mask]
 
         if filtered_df.empty:
